@@ -146,6 +146,7 @@ func (a *agent) tick() {
 	a.writeStatus()
 	tray.update(a.st, a.cfg.Username, a.loggedIn(), a.offline)
 	a.maybeUpdate(now)
+	trimMemory() // idle until the next tick: give the RAM back (memory.go)
 }
 
 // maybeUpdate checks for a new version in the background, then installs it
