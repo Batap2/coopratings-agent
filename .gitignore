@@ -1,0 +1,4 @@
+*.exe
+*.exe~
+/dist/
+rsrc_windows_amd64.syso

@@ -1,0 +1,3 @@
+Police Rubik (ui/rubik-var.woff2)
+Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik)
+Distribuée sous licence SIL Open Font License 1.1 : https://openfontlicense.org

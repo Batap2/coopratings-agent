@@ -1,0 +1,42 @@
+# Builds the exe on every "v*" tag (e.g. v1.0.0) and publishes it with its
+# SHA-256 checksum, so the downloaded exe can be matched to this repo's code.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Ressources Windows (icône, nom, manifeste)
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart("v")
+          go run . --write-icon assets/icon.ico
+          # "-icon=…" between quotes: PowerShell would split it at the dot
+          # ("-icon=assets/icon" then ".ico").
+          go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.7.0 -64 "-icon=assets/icon.ico" -o rsrc_windows_amd64.syso -product-version $v -file-version $v versioninfo.json
+      - name: Tests
+        run: go test ./...
+      - name: Compilation
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart("v")
+          go build -trimpath -ldflags "-H windowsgui -s -w -X main.version=$v" -o CoopRatings-Agent.exe .
+          (Get-FileHash CoopRatings-Agent.exe -Algorithm SHA256).Hash | Out-File -Encoding ascii CoopRatings-Agent.exe.sha256
+          Get-Content CoopRatings-Agent.exe.sha256
+      - name: Publication
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            CoopRatings-Agent.exe
+            CoopRatings-Agent.exe.sha256

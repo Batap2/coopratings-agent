@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/*FONT*/
+:root {
+    --bg: #f1ecde; --neu-dark: #bdb398; --neu-light: #fffaee;
+    --text: #073642; --muted: #657b83; --accent: #268bd2; --accent-dark: #1c6ba1;
+    --danger: #dc322f; --ok: #08a86a; --line: rgba(101, 123, 131, .22);
+    --out: 4px 4px 9px var(--neu-dark), -4px -4px 9px var(--neu-light);
+    --out-xs: 2px 2px 5px var(--neu-dark), -2px -2px 5px var(--neu-light);
+    --in: inset 3px 3px 7px var(--neu-dark), inset -3px -3px 7px var(--neu-light);
+}
+/* Dark: "Espresso", the site's dark theme (warm brown background, cream
+   text), the night version of the light theme's cream. */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #2a2520; --neu-dark: #1b1814; --neu-light: #3a332c;
+        --text: #d6cdb9; --muted: #a89d88; --accent-dark: #4a9de0; --line: rgba(168, 157, 136, .25);
+    }
+}
+:root { color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
+* { box-sizing: border-box; }
+/* Thin scrollbar in the theme colours */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border-radius: 10px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+html, body { margin: 0; height: 100%; }
+body {
+    font-family: 'Rubik', 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; user-select: none;
+    overflow: hidden;
+}
+main { height: 100%; padding: 28px 30px 24px; display: flex; flex-direction: column; }
+.view { display: flex; flex-direction: column; flex: 1; min-height: 0; animation: in .25s ease-out; }
+@keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.logo { width: 58px; height: 58px; border-radius: 16px; box-shadow: var(--out); flex: none; }
+.brand { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+.brand h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; }
+.center { text-align: center; align-items: center; }
+h2 { font-size: 21px; margin: 0 0 6px; letter-spacing: -.01em; }
+.sub { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+label.field { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 0 0 6px 4px; }
+.input { position: relative; margin-bottom: 16px; }
+input[type=text], input[type=password], input[type=search] {
+    width: 100%; padding: 12px 16px; border: none; border-radius: 14px;
+    background: var(--bg); color: var(--text); font: inherit; font-size: 15px;
+    box-shadow: var(--in); outline: none; user-select: text; transition: box-shadow .15s;
+}
+input:focus { box-shadow: var(--in), 0 0 0 2px var(--accent); }
+.eye {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    width: 34px; height: 34px; border: none; border-radius: 10px; background: transparent;
+    color: var(--muted); cursor: pointer; display: grid; place-items: center;
+}
+.eye:hover { color: var(--accent); }
+button.btn {
+    font: inherit; font-weight: 600; font-size: 15px; color: var(--text);
+    background: var(--bg); border: none; border-radius: 14px; padding: 12px 18px;
+    box-shadow: var(--out); cursor: pointer; transition: box-shadow .15s, color .15s, transform .05s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+}
+button.btn:hover { color: var(--accent); }
+button.btn:active { box-shadow: var(--in); transform: translateY(1px); }
+button.btn:disabled { opacity: .6; cursor: default; }
+button.primary { background: var(--accent); color: #fff; box-shadow: var(--out); }
+button.primary:hover { background: var(--accent-dark); color: #fff; }
+button.danger { color: var(--danger); }
+button.danger:hover { color: var(--danger); }
+button.ghost { box-shadow: none; background: transparent; padding: 8px 10px; color: var(--muted); }
+button.ghost:hover { color: var(--accent); }
+.full { width: 100%; }
+.error {
+    display: none; margin: 0 0 14px; padding: 10px 14px; border-radius: 12px;
+    background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger);
+    font-size: 13.5px; font-weight: 500;
+}
+.error.on { display: block; animation: shake .35s; }
+@keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+.foot { margin-top: auto; padding-top: 16px; text-align: center; font-size: 13px; color: var(--muted); }
+a, .link { color: var(--accent); text-decoration: none; cursor: pointer; font-weight: 600; }
+a:hover, .link:hover { text-decoration: underline; }
+.server { font-size: 11.5px; opacity: .8; margin-top: 6px; }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; animation: rot .7s linear infinite; }
+@keyframes rot { to { transform: rotate(360deg); } }
+
+/* Welcome */
+.check {
+    width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--bg); box-shadow: var(--out); color: var(--ok); margin: 6px auto 18px;
+}
+/* Mini taskbar in the colours of the Windows taskbar (light or dark, a
+   setting separate from the app theme; see data-taskbar). */
+.tray {
+    position: relative; margin: 8px auto 18px; width: 290px; height: 136px;
+    --tb-bg: #1f2a30; --tb-text: #e6edf0; --tb-pop: #2b373e; --tb-tile: rgba(255,255,255,.1);
+    --tb-chev: rgba(255,255,255,.12); --tb-shadow: rgba(0,0,0,.35);
+}
+html[data-taskbar=light] .tray {
+    --tb-bg: #f7f7f7; --tb-text: #1b1b1b; --tb-pop: #ffffff; --tb-tile: rgba(0,0,0,.07);
+    --tb-chev: rgba(0,0,0,.06); --tb-shadow: rgba(0,0,0,.16);
+}
+.tray .bar {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 42px; border-radius: 12px;
+    background: var(--tb-bg); display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 0 14px;
+    color: var(--tb-text); font-size: 12px; box-shadow: var(--out);
+}
+.tray .chev { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: var(--tb-chev); position: relative; }
+.tray .chev::after { content: ""; position: absolute; inset: -5px; border-radius: 10px; border: 2px solid #f59e0b; animation: pulse 1.6s infinite; }
+@keyframes pulse { 0% { opacity: 1; transform: scale(.92); } 100% { opacity: 0; transform: scale(1.25); } }
+.tray .pop {
+    position: absolute; right: 74px; bottom: 54px; padding: 8px; border-radius: 10px; background: var(--tb-pop);
+    display: grid; grid-template-columns: repeat(3, 26px); gap: 6px; box-shadow: 0 8px 22px var(--tb-shadow);
+}
+.tray .pop span { width: 26px; height: 26px; border-radius: 6px; background: var(--tb-tile); }
+.tray .pop svg { width: 26px; height: 26px; border-radius: 6px; outline: 2px solid #f59e0b; outline-offset: 2px; }
+.tray .clock { text-align: right; line-height: 1.2; opacity: .85; }
+
+/* Game search */
+.found {
+    padding: 12px 14px; border-radius: 14px; box-shadow: var(--in); margin-bottom: 16px; font-size: 13.5px;
+}
+.found b { font-size: 15px; }
+.found .path { color: var(--muted); font-size: 11.5px; word-break: break-all; margin-top: 2px; }
+.searchrow { display: flex; gap: 10px; margin-bottom: 12px; }
+.searchrow input { flex: 1; }
+.results {
+    flex: 1; min-height: 0; overflow-y: auto; margin: 0 -8px; padding: 4px 8px 8px;
+}
+.result {
+    width: 100%; text-align: left; display: block;
+    padding: 10px 14px; margin-bottom: 8px; border-radius: 13px; border: none; cursor: pointer;
+    background: var(--bg); color: var(--text); font: inherit; box-shadow: var(--out-xs); transition: box-shadow .15s;
+}
+.result:hover { box-shadow: var(--out-xs), 0 0 0 2px var(--accent); }
+.result .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.result .t { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result .y { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.result .meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+.result .pf { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result .src { white-space: nowrap; opacity: .85; }
+/* Type: plain games are understated; DLC / expansion / pack... stand out */
+.tag {
+    flex: none; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 18px;
+    background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);
+}
+.tag.extra { background: color-mix(in srgb, #f59e0b 20%, transparent); color: #c27803; }
+@media (prefers-color-scheme: dark) { .tag.extra { color: #f5b041; } }
+.empty { color: var(--muted); text-align: center; padding: 22px 0; font-size: 14px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 14px; }
+.actions .grow { flex: 1; }
+
+/* Control window */
+.card { border-radius: 16px; box-shadow: var(--in); padding: 14px 16px; margin-bottom: 18px; font-size: 14px; }
+.card .row { display: flex; gap: 10px; align-items: baseline; }
+.card .row + .row { margin-top: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; transform: translateY(-1px); }
+.dot.warn { background: #f59e0b; } .dot.off { background: var(--muted); } .dot.bad { background: var(--danger); }
+.acts-head { display: flex; align-items: center; gap: 4px; margin: -8px 0 12px -12px; }
+.acts-head h2 { margin: 0; }
+.acts-head .back { font-size: 20px; line-height: 1; padding: 6px 10px; }
+.acts { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+.act {
+    width: 100%; display: flex; gap: 10px; align-items: baseline; text-align: left;
+    padding: 6px 10px; border: none; border-radius: 11px; background: none; color: var(--text); font: inherit; font-size: 14px;
+}
+button.act { cursor: pointer; }
+button.act:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.act .m { flex: 1; min-width: 0; }
+.act .t { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act .s { display: block; font-size: 12.5px; color: var(--muted); }
+.act .d { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.acts .empty { padding: 40px 0; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid .btn { padding: 12px 10px; font-size: 14px; }
+.grid .wide { grid-column: span 2; }
+.modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; padding: 24px;
+}
+.modal.on { display: flex; }
+.modal .box { background: var(--bg); border-radius: 18px; padding: 22px; box-shadow: 0 16px 40px rgba(0,0,0,.35); max-width: 360px; }
+.modal .box p { margin: 0 0 18px; }
+.modal .box .actions { justify-content: flex-end; padding: 0; }
+
+/* Rating: flat grades and statuses inside an inset block */
+.rate-head { margin-bottom: 22px; }
+.rate-head h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+.rate-head p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.lbl {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 4px 7px; font-size: 12.5px; font-weight: 600; color: var(--muted);
+}
+.lbl .val { font-weight: 500; }
+.lbl .val b { font-size: 16px; color: var(--text); }
+.track { border-radius: 14px; box-shadow: var(--in); padding: 6px; }
+.notes { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.notes .n, .seg button {
+    font: inherit; font-weight: 500; color: var(--text); background: transparent; border: none;
+    border-radius: 9px; cursor: pointer; transition: background .12s, color .12s;
+}
+.notes .n { height: 30px; font-size: 13.5px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.seg button { height: 32px; font-size: 13.5px; }
+.notes .n:hover, .seg button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.notes .n.on, .seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+.hint { font-size: 12px; color: var(--muted); margin: 8px 0 18px 4px; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div class="modal" id="modal"><div class="box"><p id="modal-text"></p><div class="actions">
+    <button class="btn" id="modal-no">Annuler</button><button class="btn primary" id="modal-yes">Confirmer</button>
+</div></div></div>
+<script>
+/*APP*/
+document.documentElement.dataset.taskbar = APP.taskbarLight ? 'light' : 'dark';
+// White "C" on a blue square: same proportions as the icon (logoShape, icon.go).
+const LOGO = `<svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="12.8" fill="#268bd2"/><path fill="#fff" d="M48.02 18.72A19.84 19.84 0 1 0 48.02 45.28L41.84 39.71A11.52 11.52 0 1 1 41.84 24.29Z"/></svg>`;
+const EYE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const CHECK = `<svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
+
+// Go function call: window.__go(id, method, argsJSON); the reply comes back via __resolve.
+const pending = {}; let seq = 0;
+window.__resolve = (id, ok, val) => { const p = pending[id]; delete pending[id]; if (p) ok ? p.res(val) : p.rej(new Error(val)); };
+function go(method, ...args) {
+    return new Promise((res, rej) => { const id = ++seq; pending[id] = { res, rej }; window.__go(id, method, JSON.stringify(args)); });
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (s) => document.querySelector(s);
+const app = $('#app');
+function show(html) { app.innerHTML = `<div class="view">${html}</div>`; }
+function fmtDur(s) { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; }
+function confirmBox(text, yes) {
+    return new Promise((res) => {
+        $('#modal-text').textContent = text; $('#modal-yes').textContent = yes || 'Confirmer';
+        $('#modal').classList.add('on');
+        const done = (v) => { $('#modal').classList.remove('on'); $('#modal-yes').onclick = $('#modal-no').onclick = null; res(v); };
+        $('#modal-yes').onclick = () => done(true); $('#modal-no').onclick = () => done(false);
+    });
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#modal').classList.contains('on')) go('close'); });
+
+// --- Login ---------------------------------------------------------------
+function viewLogin(d) {
+    show(`
+        <div class="brand">${LOGO}<div><h1>CoopRatings</h1><p>Suivi automatique de vos jeux</p></div></div>
+        <h2>Connexion</h2>
+        <p class="sub">Connectez-vous avec votre compte CoopRatings : vos jeux seront ajoutés à votre liste tout seuls.</p>
+        <form id="f" autocomplete="off">
+            <label class="field" for="login">Pseudo ou e-mail</label>
+            <div class="input"><input id="login" type="text" value="${esc(d.username)}" spellcheck="false"></div>
+            <label class="field" for="pass">Mot de passe</label>
+            <div class="input"><input id="pass" type="password"><button type="button" class="eye" id="eye" title="Afficher le mot de passe">${EYE}</button></div>
+            <div class="error" id="err"></div>
+            <button class="btn primary full" id="go" type="submit">Se connecter</button>
+        </form>
+        <div class="foot">Pas encore de compte ? <span class="link" id="reg">Créer un compte</span>
+            <div class="server">${esc(d.server.replace(/^https?:\/\//, ''))}</div></div>`);
+    const login = $('#login'), pass = $('#pass'), err = $('#err'), btn = $('#go');
+    (d.username ? pass : login).focus();
+    $('#eye').onclick = () => { pass.type = pass.type === 'password' ? 'text' : 'password'; pass.focus(); };
+    $('#reg').onclick = () => go('openURL', d.server + '/register');
+    $('#f').onsubmit = async (e) => {
+        e.preventDefault();
+        err.classList.remove('on');
+        if (!login.value.trim() || !pass.value) { err.textContent = 'Indiquez votre pseudo (ou e-mail) et votre mot de passe.'; err.classList.add('on'); return; }
+        btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Connexion…';
+        try {
+            const r = await go('login', login.value.trim(), pass.value);
+            if (d.welcome) viewWelcome(r.username); else go('close');
+        } catch (x) {
+            err.textContent = x.message; err.classList.add('on');
+            btn.disabled = false; btn.textContent = 'Se connecter'; pass.select();
+        }
+    };
+}
+
+function viewWelcome(name) {
+    show(`
+        <div class="check">${CHECK}</div>
+        <div class="center view" style="animation:none">
+            <h2>C'est prêt, ${esc(name)} !</h2>
+            <p class="sub" style="margin-bottom:8px">CoopRatings suit maintenant vos jeux en arrière-plan et se lancera avec Windows.</p>
+            <div class="tray">
+                <div class="pop"><span></span><span></span>${LOGO.replace('class="logo"', '')}<span></span><span></span><span></span></div>
+                <div class="bar"><div class="chev">⌃</div><div>📶</div><div>🔊</div><div class="clock">21:30<br>20/11</div></div>
+            </div>
+            <p class="sub">Son icône est dans les <b>icônes cachées</b>, à côté de l'horloge (flèche <b>^</b>). Cliquez dessus pour ouvrir l'appli.</p>
+            <button class="btn primary full" id="ok" style="margin-top:auto">Compris</button>
+        </div>`);
+    $('#ok').focus();
+    $('#ok').onclick = () => go('close');
+}
+
+// --- Unrecognised game ---------------------------------------------------
+// A result: title and year, then type (game, DLC...), platforms (PC first,
+// since the app runs on PC) and source.
+function resultHTML(h, i) {
+    const type = h.type === 'Jeu principal' || !h.type ? 'Jeu' : h.type;
+    const extra = type !== 'Jeu' && type !== 'Ajouté à la main';
+    const pf = [...(h.platforms || [])].sort((a, b) => (b === 'PC') - (a === 'PC'));
+    const shown = pf.slice(0, 5).join(' · ') + (pf.length > 5 ? ` · +${pf.length - 5}` : '');
+    return `<button class="result" data-i="${i}">
+        <span class="top"><span class="t" title="${esc(h.title)}">${esc(h.title)}</span><span class="y">${h.year || ''}</span></span>
+        <span class="meta"><span class="tag${extra ? ' extra' : ''}">${esc(type)}</span>
+            <span class="pf" title="${esc(pf.join(', '))}">${esc(shown) || 'Plateformes inconnues'}</span>
+            <span class="src">${h.detail === 'IGDB' ? 'IGDB' : 'déjà sur CoopRatings'}</span></span>
+    </button>`;
+}
+function viewIdentify(d) {
+    show(`
+        <h2>Quel est ce jeu ?</h2>
+        <p class="sub" style="margin-bottom:14px">CoopRatings ne l'a pas reconnu. Choisissez-le pour que vos sessions soient comptées.</p>
+        <div class="found"><b>${esc(d.name)}</b>${d.seconds ? ` · ${fmtDur(d.seconds)} de jeu en attente` : ''}<div class="path">${esc(d.path)}</div></div>
+        <form class="searchrow" id="sf"><input id="q" type="search" value="${esc(d.name)}" spellcheck="false" placeholder="Nom du jeu"><button class="btn" type="submit">Rechercher</button></form>
+        <div class="results" id="res"></div>
+        <div class="actions">
+            <button class="btn danger" id="notgame">Ce n'est pas un jeu</button>
+            <span class="grow"></span>
+            <button class="btn ghost" id="later">Plus tard</button>
+        </div>`);
+    const res = $('#res'), q = $('#q');
+    let custom = '';
+    async function search() {
+        const term = q.value.trim();
+        if (!term) return;
+        custom = term;
+        res.innerHTML = '<div class="empty"><span class="spin" style="display:inline-block"></span></div>';
+        try {
+            const hits = await go('search', term);
+            res.innerHTML = (hits.length ? '' : '<div class="empty">Aucun résultat pour cette recherche.</div>') +
+                hits.map((h, i) => resultHTML(h, i)).join('') +
+                `<button class="result" data-custom="1"><span class="t">＋ Ajouter « ${esc(custom)} » sans fiche IGDB</span></button>`;
+            res.querySelectorAll('.result').forEach((b) => b.onclick = () => pick(b.dataset.custom ? null : hits[+b.dataset.i]));
+        } catch (x) {
+            res.innerHTML = `<div class="empty">Recherche impossible : ${esc(x.message)}</div>`;
+        }
+    }
+    async function pick(h) {
+        res.innerHTML = '<div class="empty"><span class="spin" style="display:inline-block"></span></div>';
+        try {
+            await go('resolve', h ? h.itemId : 0, h ? h.igdbId : 0, h ? '' : custom);
+            go('close');
+        } catch (x) {
+            res.innerHTML = `<div class="empty">Impossible d'enregistrer ce choix : ${esc(x.message)}</div>`;
+        }
+    }
+    $('#sf').onsubmit = (e) => { e.preventDefault(); search(); };
+    $('#later').onclick = () => go('close');
+    $('#notgame').onclick = async () => {
+        if (await confirmBox(`« ${d.name} » n'est pas un jeu : CoopRatings ne le suivra plus.`, 'Ce n\'est pas un jeu')) { await go('notGame'); go('close'); }
+    };
+    search();
+}
+
+// --- Rate a game ---------------------------------------------------------
+// Server status (completion_count): -2 not finishable, -1 not started,
+// 0 not finished, N finished N times. Only three choices here: after a
+// session, "not started" no longer makes sense.
+const KINDS = { todo: 'Pas fini', done: 'Fini', never: 'Pas finissable' };
+const kindOf = (s) => (s == null || s <= 0 ? (s === -2 ? 'never' : 'todo') : 'done');
+function viewRate(d) {
+    const g = d.game;
+    const initialGrade = g.grade ?? null, initialKind = kindOf(g.status);
+    let grade = initialGrade, kind = initialKind;
+    const sub = [d.seconds ? `${fmtDur(d.seconds)} de jeu` : '', g.year || ''].filter(Boolean).join(' · ');
+    show(`
+        <div class="rate-head"><h2 title="${esc(g.title)}">${esc(g.title)}</h2><p>${esc(sub)}</p></div>
+        <div class="lbl"><span>Votre note</span><span class="val" id="val"></span></div>
+        <div class="track notes" id="notes">${Array.from({ length: 21 }, (_, i) => `<button class="n" data-g="${i}" tabindex="-1">${i}</button>`).join('')}</div>
+        <p class="hint">Vous pouvez aussi taper la note au clavier, puis Entrée.</p>
+        <div class="lbl"><span>Statut</span></div>
+        <div class="track seg" id="seg">${Object.entries(KINDS).map(([k, l]) => `<button data-k="${k}" tabindex="-1">${l}</button>`).join('')}</div>
+        <div class="error" id="err" style="margin:16px 0 0"></div>
+        <button class="btn primary full" id="save" style="margin-top:22px">Enregistrer</button>
+        <div class="foot"><span class="link" id="later">Plus tard</span> · <span class="link" id="open">Commenter dans le tableur</span></div>`);
+    const save = $('#save'), err = $('#err');
+    function paint() {
+        $('#val').innerHTML = grade == null ? 'pas encore notée' : `<b>${grade}</b> / 20`;
+        app.querySelectorAll('.n').forEach((b) => b.classList.toggle('on', +b.dataset.g === grade));
+        app.querySelectorAll('.seg button').forEach((b) => b.classList.toggle('on', b.dataset.k === kind));
+        save.disabled = grade === initialGrade && kind === initialKind;
+    }
+    const pick = (n) => { grade = n; err.classList.remove('on'); paint(); };
+    app.querySelectorAll('.n').forEach((b) => b.onclick = () => pick(+b.dataset.g));
+    app.querySelectorAll('.seg button').forEach((b) => b.onclick = () => { kind = b.dataset.k; paint(); });
+
+    // Keyboard: "1" then "5" = 15; "25" restarts from 5; arrow keys ±1.
+    let buf = '', timer = 0;
+    function digit(k) {
+        clearTimeout(timer);
+        let s = buf + k;
+        if (+s > 20) s = k;
+        pick(+s);
+        buf = s === '1' || s === '2' ? s : '';
+        if (buf) timer = setTimeout(() => { buf = ''; }, 800);
+    }
+    document.addEventListener('keydown', (e) => {
+        if (/^[0-9]$/.test(e.key)) digit(e.key);
+        else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') pick(Math.min(20, (grade ?? -1) + 1));
+        else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') pick(Math.max(0, (grade ?? 1) - 1));
+        else if (e.key === 'Enter') { e.preventDefault(); if (!save.disabled) submit(); }
+        else return;
+        e.preventDefault();
+    });
+
+    async function submit() {
+        const status = kind === initialKind ? null : kind === 'done' ? Math.max(1, g.status ?? 0) : kind === 'never' ? -2 : 0;
+        save.disabled = true; save.innerHTML = '<span class="spin"></span> Enregistrement…';
+        try {
+            await go('rate', grade === initialGrade ? null : grade, status);
+            show(`<div class="center view" style="animation:none; justify-content:center; padding-bottom:40px">
+                <div class="check">${CHECK}</div><h2>C'est noté !</h2>
+                <p class="sub">${esc(g.title)} : ${grade == null ? '' : `<b>${grade}/20</b> · `}${KINDS[kind]}</p></div>`);
+            setTimeout(() => go('close'), 1400);
+        } catch (x) {
+            err.textContent = x.message; err.classList.add('on');
+            save.textContent = 'Enregistrer'; paint();
+        }
+    }
+    save.onclick = submit;
+    $('#later').onclick = () => go('close');
+    $('#open').onclick = () => { go('openURL', g.url); go('close'); };
+    paint();
+}
+
+// --- Control window ------------------------------------------------------
+function fmtWhen(iso) {
+    const d = new Date(iso), now = new Date();
+    const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const days = Math.round((day(now) - day(d)) / 864e5);
+    const hm = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    if (days === 0) return `aujourd'hui ${hm}`;
+    if (days === 1) return `hier ${hm}`;
+    return `${d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} ${hm}`;
+}
+// [dot class, label] for a session's outcome (see history.go).
+function actState(r, minSession) {
+    switch (r.state) {
+        case 'added': return ['', 'Ajouté à votre liste'];
+        case 'hours': return ['', 'Temps de jeu ajouté'];
+        case 'removed': return ['off', 'Ignorée : jeu retiré de votre liste'];
+        case 'short': return ['off', `Ignorée : moins de ${Math.round(minSession / 60)} min`];
+        case 'notgame': return ['off', 'Ignorée : pas un jeu'];
+        case 'refused': return ['bad', 'Refusée par le site : ' + r.error];
+        case 'login': return ['warn', 'En attente : connectez-vous'];
+        case 'identify': return ['warn', 'En attente : jeu à identifier'];
+        case 'checking': return ['warn', 'En attente : recherche du jeu'];
+        case 'offline': return ['warn', 'En attente : site injoignable'];
+        case 'retry': return ['warn', 'En attente : ' + r.error];
+        default: return ['warn', "En attente d'envoi"];
+    }
+}
+function actHTML(r, minSession) {
+    const [dot, label] = actState(r, minSession);
+    const inner = `<span class="dot ${dot}"></span><span class="m"><span class="t">${esc(r.title)}</span><span class="s">${esc(label)} · ${esc(fmtWhen(r.end))}</span></span><span class="d">${fmtDur(r.seconds)}</span>`;
+    if (r.state === 'identify') return `<button class="act" data-a="identify" title="Indiquer de quel jeu il s'agit">${inner}</button>`;
+    if (r.itemId && r.state !== 'notgame') return `<button class="act" data-a="game:${r.itemId}" title="Voir dans le tableur">${inner}</button>`;
+    return `<div class="act">${inner}</div>`;
+}
+function viewControl(d) {
+    const rows = [];
+    rows.push(`<div class="row"><span class="dot${d.offline ? ' warn' : ''}"></span><span>Connecté en tant que <b>${esc(d.username)}</b>${d.offline ? ' · serveur injoignable' : ''}</span></div>`);
+    if (d.playing.length) rows.push(`<div class="row"><span class="dot"></span><span>En jeu : <b>${esc(d.playing.join(', '))}</b></span></div>`);
+    else rows.push(`<div class="row"><span class="dot"></span><span>Suivi actif, aucun jeu en cours</span></div>`);
+    if (d.queue) rows.push(`<div class="row"><span class="dot warn"></span><span>${d.queue} session(s) en attente d'envoi</span></div>`);
+    if (d.unknown) rows.push(`<div class="row"><span class="dot warn"></span><span>${d.unknown} jeu(x) à identifier</span></div>`);
+    show(`
+        <div class="brand">${LOGO}<div><h1>CoopRatings Agent</h1><p>Version ${esc(d.version)}</p></div></div>
+        <div class="card">${rows.join('')}</div>
+        <div class="grid">
+            <button class="btn primary" data-a="tableur">Ouvrir mon tableur</button>
+            <button class="btn" id="activity">Activité récente</button>
+            ${d.unknown ? '<button class="btn wide" data-a="identify">Identifier les jeux non reconnus</button>' : ''}
+            ${d.canUpdate ? '<button class="btn wide" data-a="update">Installer cette version (mise à jour)</button>' : ''}
+            <button class="btn" data-a="logout" data-c="Se déconnecter ? L'appli reste lancée : vous pourrez vous reconnecter depuis son icône.">Se déconnecter</button>
+            <button class="btn" data-a="quit" data-c="Arrêter l'appli jusqu'au prochain démarrage de Windows ?">Arrêter l'appli</button>
+            <button class="btn danger wide" data-a="uninstall" data-c="Désinstaller CoopRatings Agent ? Les sessions pas encore envoyées seront perdues.">Désinstaller</button>
+        </div>`);
+    $('#activity').onclick = () => viewActivity(d);
+    bindActions();
+}
+function viewActivity(d) {
+    const recent = d.recent || [];
+    show(`
+        <div class="acts-head"><button class="btn ghost back" id="back" title="Retour" aria-label="Retour">←</button><h2>Activité récente</h2></div>
+        <div class="acts">${recent.length ? recent.map((r) => actHTML(r, d.minSession)).join('') : '<div class="empty">Aucune partie pour l’instant.</div>'}</div>`);
+    $('#back').onclick = () => viewControl(d);
+    bindActions();
+}
+// Buttons and rows with data-a run a Go action, then close the window.
+function bindActions() {
+    app.querySelectorAll('[data-a]').forEach((b) => b.onclick = async () => {
+        if (b.dataset.c && !(await confirmBox(b.dataset.c, b.textContent))) return;
+        b.disabled = true;
+        try { await go('action', b.dataset.a); go('close'); } catch (x) { b.disabled = false; alert(x.message); }
+    });
+}
+
+({ login: viewLogin, welcome: (d) => viewWelcome(d.username), identify: viewIdentify, rate: viewRate, control: viewControl, activity: viewActivity })[APP.view](APP.data);
+</script>
+</body>
+</html>
