@@ -49,6 +49,7 @@ func main() {
 	var (
 		diag, dev, once, autostart, testNotif bool
 		afterUpdate, activity                 bool
+		uninstallReq, quiet                   bool
 		server, devLogin, protoArg            string
 		interval                              = time.Minute
 	)
@@ -68,6 +69,11 @@ func main() {
 			autostart = true
 		case a == "--activity":
 			activity = true
+		case a == uninstallFlag:
+			// "Uninstall" button of Windows "Installed apps" (install.go).
+			uninstallReq = true
+		case a == quietFlag:
+			quiet = true
 		case a == afterUpdateFlag:
 			// Relaunched by the auto-updater (see update.go).
 			afterUpdate, autostart = true, true
@@ -99,6 +105,9 @@ func main() {
 	setupLog()
 
 	switch {
+	case uninstallReq:
+		uninstallFromWindows(quiet)
+		return
 	case protoArg != "":
 		handleProtocol(protoArg)
 		return
@@ -190,19 +199,24 @@ func main() {
 	if err := registerShellIntegration(exe); err != nil {
 		log.Printf("intégration Windows : %v", err)
 	}
+	if !dev {
+		if err := registerUninstallEntry(exe, cfg.Server); err != nil {
+			log.Printf("applications installées : %v", err)
+		}
+	}
 	if !dev && !cfg.AutostartOff && !autostartEnabled() {
 		if err := setAutostart(true); err != nil {
 			log.Printf("démarrage automatique : %v", err)
 		}
 	}
 
-	// Launched manually while logged out: the login window opens AFTER the
-	// tray icon appears (otherwise the app runs without an icon while the
-	// window is open). Cancelling does not stop the app: it waits in the tray.
+	// Logged out, whether launched manually or with Windows: the login window
+	// opens AFTER the tray icon appears (otherwise the app runs without an
+	// icon while the window is open). Cancelling does not stop the app: it
+	// waits in the tray, whose icon and menu offer to log in.
 	askNow := false
 	if cfg.token() == "" {
-		switch {
-		case devLogin != "":
+		if devLogin != "" {
 			user, pass, _ := strings.Cut(devLogin, ":")
 			token, username, err := newAPI(cfg).login(user, pass)
 			if err != nil {
@@ -213,15 +227,11 @@ func main() {
 			cfg.Username = username
 			cfg.setToken(token)
 			saveConfig(cfg)
-		case !autostart:
+		} else {
 			askNow = true
 		}
 	}
-	switch {
-	case askNow:
-	case cfg.token() == "":
-		remindLogin()
-	case !autostart && !dev:
+	if !askNow && !autostart && !dev {
 		showToast("CoopRatings Agent est lancé", "Il suit vos jeux en arrière-plan.", "")
 	}
 
@@ -237,8 +247,9 @@ func main() {
 	runWithTray(a, nil)
 }
 
-// remindLogin shows a quiet "log in" notification (at Windows startup, or
-// when the session has expired). Clicking it opens the login window.
+// remindLogin shows a "log in" notification when no login window can be
+// opened (--once mode, without a tray icon). Clicking it opens the login
+// window.
 func remindLogin() {
 	showToast("CoopRatings : connectez-vous", "Cliquez ici pour vous connecter et suivre vos jeux automatiquement.",
 		protocolScheme+":login")

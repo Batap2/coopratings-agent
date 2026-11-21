@@ -468,7 +468,14 @@ func (a *agent) netError(err error) {
 		if !a.authWarned {
 			a.authWarned = true
 			log.Print("jeton refusé : reconnexion nécessaire")
-			remindLogin()
+			// Session expired or revoked: open the login window, once until
+			// the next login (cancelling it leaves the app in the tray, which
+			// offers to log in).
+			if tray != nil {
+				go tray.login()
+			} else {
+				remindLogin()
+			}
 		}
 		return
 	}

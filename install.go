@@ -4,7 +4,9 @@ package main
 //   - the exe is copied to %LOCALAPPDATA%\CoopRatingsAgent (the downloaded
 //     file can be deleted afterwards);
 //   - start with Windows (HKCU\...\Run);
-//   - notifications and the coopratings-agent: protocol (see notify.go).
+//   - notifications and the coopratings-agent: protocol (see notify.go);
+//   - an entry in Windows "Installed apps" (HKCU\...\Uninstall), whose
+//     "Uninstall" button runs the exe with --uninstall.
 
 import (
 	"encoding/json"
@@ -17,11 +19,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ncruces/zenity"
 	"golang.org/x/sys/windows/registry"
 )
 
 const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
 const runValue = "CoopRatingsAgent"
+
+// uninstallKey is the app's entry in Windows "Installed apps" (Settings >
+// Apps, and Programs and Features), per user like the rest of the install.
+const uninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\CoopRatingsAgent`
+
+// Command-line flags of the "Uninstall" button of that entry.
+const (
+	uninstallFlag = "--uninstall"
+	quietFlag     = "--quiet" // no confirmation (QuietUninstallString)
+)
 
 func installedExe() string { return appFile("CoopRatings-Agent.exe") }
 
@@ -120,8 +133,68 @@ func autostartEnabled() bool {
 	return err == nil
 }
 
-// uninstall removes autostart, notifications and the protocol handler, then
-// deletes the app folder once the process has exited.
+// registerUninstallEntry adds (or refreshes) the app in Windows "Installed
+// apps". Called on every launch of the installed copy, so the version shown
+// follows auto-updates; the install date is the first one.
+func registerUninstallEntry(exe, server string) error {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, uninstallKey, registry.SET_VALUE|registry.QUERY_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+	if _, _, err := k.GetStringValue("InstallDate"); err != nil {
+		k.SetStringValue("InstallDate", time.Now().Format("20060102"))
+	}
+	values := [][2]string{
+		{"DisplayName", "CoopRatings Agent"},
+		{"DisplayVersion", version},
+		{"Publisher", "CoopRatings"},
+		{"DisplayIcon", exe + ",0"},
+		{"InstallLocation", appDir},
+		{"UninstallString", fmt.Sprintf(`"%s" %s`, exe, uninstallFlag)},
+		{"QuietUninstallString", fmt.Sprintf(`"%s" %s %s`, exe, uninstallFlag, quietFlag)},
+		{"URLInfoAbout", strings.TrimRight(server, "/") + "/appli"},
+		{"HelpLink", "https://github.com/" + updateRepo},
+	}
+	for _, v := range values {
+		if err := k.SetStringValue(v[0], v[1]); err != nil {
+			return err
+		}
+	}
+	k.SetDWordValue("NoModify", 1)
+	k.SetDWordValue("NoRepair", 1)
+	if st, err := os.Stat(exe); err == nil {
+		k.SetDWordValue("EstimatedSize", uint32(st.Size()/1024)) // in KB
+	}
+	return nil
+}
+
+// uninstallFromWindows handles the "Uninstall" button of Windows "Installed
+// apps": confirmation (unless quiet), the running app is stopped (it sends
+// what it can before exiting), then uninstall.
+func uninstallFromWindows(quiet bool) {
+	if !quiet && zenity.Question("Désinstaller CoopRatings Agent ? Les sessions pas encore envoyées seront perdues.",
+		zenity.Title(dlgTitle), zenity.OKLabel("Désinstaller"), zenity.CancelLabel("Annuler")) != nil {
+		return
+	}
+	if mutexExists(mutexName) {
+		postInbox(inboxMsg{Type: "quit"})
+		if !waitMainExit(15 * time.Second) {
+			if !quiet {
+				zenity.Error("CoopRatings Agent ne s'est pas arrêté. Quittez-le depuis son icône, puis réessayez.", zenity.Title(dlgTitle))
+			}
+			return
+		}
+	}
+	if !quiet {
+		showToast("CoopRatings Agent est désinstallé", "Merci de l'avoir essayé !", "")
+	}
+	uninstall()
+}
+
+// uninstall removes autostart, notifications, the protocol handler and the
+// "Installed apps" entry, then deletes the app folder once the process has
+// exited.
 func uninstall() {
 	// Revoke the tokens on the server now: the app won't run again to do it.
 	cfg := loadConfig()
@@ -131,6 +204,7 @@ func uninstall() {
 	}
 	setAutostart(false)
 	unregisterShellIntegration()
+	registry.DeleteKey(registry.CURRENT_USER, uninstallKey)
 	cmd := exec.Command("cmd.exe", "/c", "timeout", "/t", "3", "/nobreak", ">nul", "&", "rmdir", "/s", "/q", appDir)
 	cmd.SysProcAttr = hiddenProcAttr()
 	cmd.Start()
