@@ -1,7 +1,8 @@
 package main
 
-// Main loop: every minute, detect running games, have the server identify
-// them, track play sessions, upload finished ones and offer to rate the game.
+// Main loop: every minute (and 10 s after a game closes, see procwatch.go),
+// detect running games, have the server identify them, track play sessions,
+// upload finished ones and offer to rate the game.
 
 import (
 	"crypto/rand"
@@ -31,6 +32,7 @@ type agent struct {
 	queue      []queuedSession
 	det        *detector
 	wake       windows.Handle
+	procs      map[uint32]watchedProc // running games' processes, by PID (procwatch.go)
 	interval   time.Duration
 	lastTick   time.Time
 	resumeAt   time.Time // end of sleep: no session may start before this
@@ -97,7 +99,7 @@ func (a *agent) run(once bool) {
 		if once || a.quit { // Quit: stop now, without waiting for the next tick
 			break
 		}
-		sleepOrWake(a.wake, a.interval)
+		a.wait()
 	}
 	if a.quit {
 		a.flush(time.Now()) // upload whatever can be sent before exiting
@@ -133,6 +135,7 @@ func (a *agent) tick() {
 	}
 	a.identify(now)
 	a.track(cands, now)
+	a.watchGames(cands)
 	a.flush(now)
 	a.flushMutes()
 	a.flushRevokes(now)

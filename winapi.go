@@ -267,15 +267,6 @@ func wakeMain() {
 	windows.CloseHandle(h)
 }
 
-// sleepOrWake waits for d, or less if another process wakes us up.
-func sleepOrWake(ev windows.Handle, d time.Duration) {
-	if ev == 0 {
-		time.Sleep(d)
-		return
-	}
-	windows.WaitForSingleObject(ev, uint32(d/time.Millisecond))
-}
-
 // hiddenProcAttr makes a child process start without a console window.
 func hiddenProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
