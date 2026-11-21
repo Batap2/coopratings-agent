@@ -5,6 +5,7 @@ package main
 // "DiceHoarder-Win64-Shipping" -> "Dice Hoarder").
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -74,6 +75,11 @@ func emulatorGameTitle(e *emulator, titles []string) string {
 	best := ""
 	for _, t := range titles {
 		for _, part := range splitTitle(t) {
+			// ROM shown with its path ("C:\roms\Game (USA).iso"): keep the file
+			// name only, the path stays on the PC.
+			if i := strings.LastIndex(part, `\`); i >= 0 {
+				part = part[i+1:]
+			}
 			p := strings.ReplaceAll(part, e.name, " ")
 			p = strings.ReplaceAll(p, strings.ToLower(e.name), " ")
 			p = reRomExt.ReplaceAllString(p, " ")
@@ -159,10 +165,60 @@ func isGenericName(s string) bool {
 		strings.HasPrefix(n, "microsoft") || strings.HasPrefix(n, "windows")
 }
 
-// addName appends a cleaned candidate name if it is useful and not a duplicate.
+// --- Privacy: no path leaves the PC -------------------------------------------
+//
+// Program names (launcher, exe, product, window title, game folder) are sent
+// to the server to identify the game; a path never is. A name that looks like
+// one (a window title can show one) is dropped. The Windows user name could
+// only leak as a folder (C:\Users\<name>): gameFolderName never uses it.
+
+var reDrivePath = regexp.MustCompile(`(?i)(^|[^a-z])[a-z]:[\\/]`)
+
+// looksLikePath reports whether a name contains a path.
+func looksLikePath(s string) bool {
+	return strings.Contains(s, `\`) || reDrivePath.MatchString(s)
+}
+
+// publicNames drops the names that look like a path (also for candidates
+// saved by an older version, before names were filtered).
+func publicNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if !looksLikePath(n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// gameFolderName returns the name of a game's folder, or "" for a folder that
+// is not a game's: a drive root, the users folder or a user's profile folder
+// (its name is the Windows user name), e.g. for an exe left in
+// C:\Users\<name>\Downloads.
+func gameFolderName(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	d := strings.ToLower(filepath.Clean(dir))
+	if filepath.Dir(d) == d { // drive root
+		return ""
+	}
+	if profile := os.Getenv("USERPROFILE"); profile != "" {
+		p := strings.ToLower(filepath.Clean(profile))
+		users := filepath.Dir(p) // C:\Users
+		if d == p || d == users || filepath.Dir(d) == users {
+			return ""
+		}
+	}
+	return filepath.Base(dir)
+}
+
+// addName appends a cleaned candidate name if it is useful, not a duplicate
+// and not a path.
 func addName(names []string, raw string) []string {
 	n := cleanName(raw)
-	if n == "" || isGenericName(n) || isGenericName(strings.TrimSuffix(strings.ToLower(raw), ".exe")) {
+	if n == "" || isGenericName(n) || isGenericName(strings.TrimSuffix(strings.ToLower(raw), ".exe")) ||
+		looksLikePath(raw) {
 		return names
 	}
 	for _, x := range names {

@@ -318,7 +318,7 @@ function viewIdentify(d) {
     show(`
         <h2>Quel est ce jeu ?</h2>
         <p class="sub" style="margin-bottom:14px">CoopRatings ne l'a pas reconnu. Choisissez-le pour que vos sessions soient comptées.</p>
-        <div class="found"><b>${esc(d.name)}</b>${d.seconds ? ` · ${fmtDur(d.seconds)} de jeu en attente` : ''}<div class="path">${esc(d.path)}</div></div>
+        <div class="found"><b>${esc(d.label || d.name)}</b>${d.seconds ? ` · ${fmtDur(d.seconds)} de jeu en attente` : ''}<div class="path">${esc(d.path)}</div></div>
         <form class="searchrow" id="sf"><input id="q" type="search" value="${esc(d.name)}" spellcheck="false" placeholder="Nom du jeu"><button class="btn" type="submit">Rechercher</button></form>
         <div class="results" id="res"></div>
         <div class="actions">
@@ -355,7 +355,7 @@ function viewIdentify(d) {
     $('#sf').onsubmit = (e) => { e.preventDefault(); search(); };
     $('#later').onclick = () => go('close');
     $('#notgame').onclick = async () => {
-        if (await confirmBox(`« ${d.name} » n'est pas un jeu : CoopRatings ne le suivra plus.`, 'Ce n\'est pas un jeu')) { await go('notGame'); go('close'); }
+        if (await confirmBox(`« ${d.label || d.name} » n'est pas un jeu : CoopRatings ne le suivra plus.`, 'Ce n\'est pas un jeu')) { await go('notGame'); go('close'); }
     };
     search();
 }
@@ -480,12 +480,49 @@ function viewControl(d) {
             <button class="btn" id="activity">Activité récente</button>
             ${d.unknown ? '<button class="btn wide" data-a="identify">Identifier les jeux non reconnus</button>' : ''}
             ${d.canUpdate ? '<button class="btn wide" data-a="update">Installer cette version (mise à jour)</button>' : ''}
+            <button class="btn" id="privacy">Vie privée</button>
             <button class="btn" data-a="logout" data-c="Se déconnecter ? L'appli reste lancée : vous pourrez vous reconnecter depuis son icône.">Se déconnecter</button>
             <button class="btn" data-a="quit" data-c="Arrêter l'appli jusqu'au prochain démarrage de Windows ?">Arrêter l'appli</button>
-            <button class="btn danger wide" data-a="uninstall" data-c="Désinstaller CoopRatings Agent ? Les sessions pas encore envoyées seront perdues.">Désinstaller</button>
+            <button class="btn danger" data-a="uninstall" data-c="Désinstaller CoopRatings Agent ? Les sessions pas encore envoyées seront perdues.">Désinstaller</button>
         </div>`);
     $('#activity').onclick = () => viewActivity(d);
+    $('#privacy').onclick = () => viewPrivacy(d);
     bindActions();
+}
+// Play times setting of the account (agent_api.go on the site).
+const PLAYTIMES = {
+    off: ['Désactivés', "L'appli envoie seulement la durée de vos parties, ajoutée à vos heures de jeu : ni date ni heure. Ces parties n'apparaissent pas dans les stats « Temps de jeu »."],
+    private: ['Privés', "L'heure de vos parties est envoyée, mais vous êtes seul à voir à quels moments vous jouez."],
+    public: ['Publics', "Les membres voient à quels moments de la journée vous jouez (stats « Quand on joue »)."],
+};
+function viewPrivacy(d) {
+    show(`
+        <div class="acts-head"><button class="btn ghost back" id="back" title="Retour" aria-label="Retour">←</button><h2>Vie privée</h2></div>
+        <div class="card">
+            <div class="row"><span class="dot"></span><span>Envoyé : le nom des jeux reconnus et la durée de vos parties.</span></div>
+            <div class="row"><span class="dot off"></span><span>Jamais envoyé : les dossiers de votre PC, son nom, ni les autres programmes ouverts.</span></div>
+        </div>
+        <div class="lbl"><span>Horaires de jeu</span></div>
+        <div class="track seg" id="pt">${Object.entries(PLAYTIMES).map(([k, [l]]) => `<button data-k="${k}" tabindex="-1" disabled>${l}</button>`).join('')}</div>
+        <p class="hint" id="pth"><span class="spin" style="display:inline-block; vertical-align:middle"></span></p>
+        <div class="error" id="err"></div>
+        <div class="foot">Aussi réglable sur le site, dans « Modifier le profil ».</div>`);
+    const btns = app.querySelectorAll('#pt button'), hint = $('#pth'), err = $('#err');
+    let cur = null;
+    function paint() {
+        btns.forEach((b) => { b.classList.toggle('on', b.dataset.k === cur); b.disabled = cur == null; });
+        hint.textContent = cur ? PLAYTIMES[cur][1] : '';
+    }
+    function fail(x) { err.textContent = x.message; err.classList.add('on'); }
+    btns.forEach((b) => b.onclick = async () => {
+        if (b.dataset.k === cur) return;
+        err.classList.remove('on');
+        btns.forEach((x) => x.disabled = true);
+        try { cur = await go('setPlayTimes', b.dataset.k); } catch (x) { fail(x); }
+        paint();
+    });
+    go('getPlayTimes').then((v) => { cur = v; paint(); }).catch((x) => { hint.textContent = ''; fail(x); });
+    $('#back').onclick = () => viewControl(d);
 }
 function viewActivity(d) {
     const recent = d.recent || [];
@@ -504,7 +541,7 @@ function bindActions() {
     });
 }
 
-({ login: viewLogin, welcome: (d) => viewWelcome(d.username), identify: viewIdentify, rate: viewRate, control: viewControl, activity: viewActivity })[APP.view](APP.data);
+({ login: viewLogin, welcome: (d) => viewWelcome(d.username), identify: viewIdentify, rate: viewRate, control: viewControl, activity: viewActivity, privacy: viewPrivacy })[APP.view](APP.data);
 </script>
 </body>
 </html>

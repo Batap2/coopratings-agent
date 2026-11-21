@@ -194,9 +194,16 @@ func (a *agent) identify(now time.Time) {
 	if len(a.st.Pending) == 0 || !a.loggedIn() {
 		return
 	}
+	// The local key is the exe path: the server gets a number instead and
+	// answers with it, so the path never leaves the PC.
 	var batch []apiCandidate
-	for _, p := range a.st.Pending {
-		batch = append(batch, p.Cand)
+	local := map[string]string{} // key sent → local key
+	for k, p := range a.st.Pending {
+		c := p.Cand
+		c.Key = strconv.Itoa(len(batch))
+		c.Names = publicNames(c.Names)
+		local[c.Key] = k
+		batch = append(batch, c)
 		if len(batch) == 20 {
 			break
 		}
@@ -208,22 +215,30 @@ func (a *agent) identify(now time.Time) {
 	}
 	a.offline = false
 	for _, v := range verdicts {
-		p, ok := a.st.Pending[v.Key]
+		k, ok := local[v.Key]
 		if !ok {
 			continue
 		}
-		delete(a.st.Pending, v.Key)
-		a.st.Verdicts[v.Key] = verdict{Verdict: v.Verdict, ItemID: v.ItemID, IGDBID: v.IGDBID, Title: v.Title, At: now}
+		p := a.st.Pending[k]
+		delete(a.st.Pending, k)
+		a.st.Verdicts[k] = verdict{Verdict: v.Verdict, ItemID: v.ItemID, IGDBID: v.IGDBID, Title: v.Title, At: now}
 		log.Printf("identifié %q → %s %s (%s)", firstName(p.Cand), v.Verdict, v.Title, v.Reason)
 		switch v.Verdict {
 		case "unknown":
-			a.st.Unknown[v.Key] = unknownGame{Key: v.Key, Name: firstName(p.Cand), Path: p.Path, FirstSeen: now}
+			// Name: what the "which game is this?" window searches right away,
+			// so only a name that can be sent ("" if none).
+			name := ""
+			if names := publicNames(p.Cand.Names); len(names) > 0 {
+				name = names[0]
+			}
+			a.st.Unknown[k] = unknownGame{Key: k, Name: name, Path: p.Path, FirstSeen: now}
 		case "notgame":
-			delete(a.st.Active, "key:"+v.Key)
+			delete(a.st.Active, "key:"+k)
 		}
 	}
 }
 
+// firstName is a candidate's name for the local log and windows.
 func firstName(c apiCandidate) string {
 	if len(c.Names) > 0 {
 		return c.Names[0]
@@ -344,7 +359,7 @@ func (a *agent) flush(now time.Time) {
 	if !a.loggedIn() || len(a.queue) == 0 {
 		return
 	}
-	var send []apiSession
+	var send []queuedSession
 	keep := a.queue[:0]
 	for _, q := range a.queue {
 		if q.ItemID == 0 && q.IGDBID == 0 {
@@ -364,17 +379,25 @@ func (a *agent) flush(now time.Time) {
 		}
 		keep = append(keep, q)
 		if len(send) < 50 {
-			send = append(send, apiSession{
-				ID: q.ID, ItemID: q.ItemID, IGDBID: q.IGDBID, Platform: q.Platform, Source: q.Source,
-				Start: q.Start.Format(time.RFC3339), End: q.End.Format(time.RFC3339), Seconds: q.Seconds,
-			})
+			send = append(send, q)
 		}
 	}
 	a.queue = keep
 	if len(send) == 0 {
 		return
 	}
-	results, err := a.api.sendSessions(send)
+	// Play times setting read just before sending (it can be changed on the
+	// site at any time): when off, start and end times stay on the PC.
+	me, err := a.api.me()
+	if err != nil {
+		a.netError(err)
+		return
+	}
+	sessions := make([]apiSession, len(send))
+	for i, q := range send {
+		sessions[i] = newAPISession(q, me.PlayTimes)
+	}
+	results, err := a.api.sendSessions(sessions)
 	if err != nil {
 		a.netError(err)
 		return

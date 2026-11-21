@@ -221,7 +221,7 @@ func (d *detector) scan() ([]candidate, []procReport) {
 			c.Names = addName(c.Names, discName)
 		}
 		c.Names = addName(c.Names, exeProductName(p.Path))
-		c.Names = addName(c.Names, filepath.Base(fp.RootDir))
+		c.Names = addName(c.Names, gameFolderName(fp.RootDir))
 		c.Names = addName(c.Names, filepath.Base(p.Path))
 		if len(p.Titles) > 0 {
 			c.Names = addName(c.Names, p.Titles[0])

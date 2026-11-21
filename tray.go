@@ -189,7 +189,7 @@ func (t *trayUI) update(st *state, username string, loggedIn, offline bool) {
 	}
 	for i, s := range t.slots {
 		if i < len(unknown) {
-			label := "⚠ « " + unknown[i].Name + " »"
+			label := "⚠ « " + unknown[i].label() + " »"
 			if unknown[i].Seconds > 0 {
 				label += " · " + formatDuration(unknown[i].Seconds)
 			}

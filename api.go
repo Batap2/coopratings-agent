@@ -89,25 +89,57 @@ func serverLacksAPI(resp *http.Response) bool {
 	return resp.StatusCode < 300
 }
 
+// login sends the site login and password only: nothing about the PC (not
+// even its name).
 func (a *apiClient) login(login, password string) (token, username string, err error) {
-	host, _ := os.Hostname()
 	var out struct {
 		Token    string `json:"token"`
 		Username string `json:"username"`
 	}
-	err = a.do("POST", "/api/agent/login", map[string]string{"login": login, "password": password, "label": "Windows " + host}, &out)
+	err = a.do("POST", "/api/agent/login", map[string]string{"login": login, "password": password}, &out)
 	return out.Token, out.Username, err
 }
 
-func (a *apiClient) me() (username, tableur string, err error) {
-	var out struct {
-		Username string `json:"username"`
-		Tableur  string `json:"tableur"`
-	}
-	err = a.do("GET", "/api/agent/me", nil, &out)
-	return out.Username, out.Tableur, err
+// Play times setting of the account (who sees when you play):
+//
+//	off      the app sends only the duration of a session, added to the
+//	         game's hours: no date, no time
+//	private  times are sent, only you see them
+//	public   times are sent, everyone sees them ("when we play" stats)
+const (
+	playTimesOff     = "off"
+	playTimesPrivate = "private"
+	playTimesPublic  = "public"
+)
+
+type apiMe struct {
+	Username  string `json:"username"`
+	Tableur   string `json:"tableur"`
+	PlayTimes string `json:"playTimes"`
 }
 
+func (a *apiClient) me() (apiMe, error) {
+	var out apiMe
+	err := a.do("GET", "/api/agent/me", nil, &out)
+	if out.PlayTimes == "" { // server older than the setting: times were public
+		out.PlayTimes = playTimesPublic
+	}
+	return out, err
+}
+
+// setPlayTimes changes the account's play times setting and returns the
+// value saved by the server.
+func (a *apiClient) setPlayTimes(v string) (string, error) {
+	var out struct {
+		PlayTimes string `json:"playTimes"`
+	}
+	err := a.do("POST", "/api/agent/settings", map[string]string{"playTimes": v}, &out)
+	return out.PlayTimes, err
+}
+
+// apiCandidate is a program to identify. Locally, Key is the exe path; the
+// copy sent to the server has a plain number instead (agent.identify), so no
+// path ever leaves the PC.
 type apiCandidate struct {
 	Key        string   `json:"key"`
 	SteamAppID int      `json:"steamAppId,omitempty"`
@@ -159,15 +191,28 @@ func (a *apiClient) resolve(itemID, igdbID int, title string) (int, string, erro
 	return out.ItemID, out.Title, err
 }
 
+// apiSession is a finished session, with its start and end (RFC 3339, PC
+// local time) except with play times off: then only its duration, which the
+// site adds to the game's hours without keeping anything else.
 type apiSession struct {
-	ID       string `json:"id"`
+	ID       string `json:"id"` // random, so that a resend is not counted twice
 	ItemID   int    `json:"itemId,omitempty"`
 	IGDBID   int    `json:"igdbId,omitempty"`
 	Platform string `json:"platform,omitempty"`
 	Source   string `json:"source"`
-	Start    string `json:"start"`
-	End      string `json:"end"`
+	Start    string `json:"start,omitempty"`
+	End      string `json:"end,omitempty"`
 	Seconds  int    `json:"seconds"`
+}
+
+// newAPISession converts a queued session; with play times off, no date nor
+// time is sent.
+func newAPISession(q queuedSession, playTimes string) apiSession {
+	s := apiSession{ID: q.ID, ItemID: q.ItemID, IGDBID: q.IGDBID, Platform: q.Platform, Source: q.Source, Seconds: q.Seconds}
+	if playTimes != playTimesOff {
+		s.Start, s.End = q.Start.Format(time.RFC3339), q.End.Format(time.RFC3339)
+	}
+	return s
 }
 
 type apiSessionResult struct {

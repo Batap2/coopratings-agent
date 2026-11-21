@@ -264,7 +264,7 @@ func askLogin(cfg *config) error {
 
 func identifyDialog(api *apiClient, u unknownGame) {
 	shown := showWebWindow("CoopRatings : quel est ce jeu ?", "identify",
-		map[string]any{"name": u.Name, "path": u.Path, "seconds": u.Seconds}, 540, 640,
+		map[string]any{"name": u.Name, "label": u.label(), "path": u.Path, "seconds": u.Seconds}, 540, 640,
 		func(method string, args []json.RawMessage) (any, error) {
 			switch method {
 			case "search":
@@ -346,7 +346,8 @@ func orInt(v, def int) int {
 }
 
 // controlPanel shows the control window, opened on view "control" or
-// "activity" (recent sessions).
+// "activity" (recent sessions). Its "Vie privée" screen reads and changes the
+// account's play times setting.
 func controlPanel(cfg config, dev bool, view string) {
 	var st status
 	readJSON(appFile("status.json"), &st)
@@ -370,7 +371,21 @@ func controlPanel(cfg config, dev bool, view string) {
 	after.Store("")
 	shown := showWebWindowAt(appWindowTitle, view, data, 460, 600, true,
 		func(method string, args []json.RawMessage) (any, error) {
-			if method != "action" {
+			switch method {
+			case "getPlayTimes": // "Vie privée" screen
+				me, err := newAPI(cfg).me()
+				if err != nil {
+					return nil, friendlyError(err, server)
+				}
+				return me.PlayTimes, nil
+			case "setPlayTimes":
+				v, err := newAPI(cfg).setPlayTimes(argString(args, 0))
+				if err != nil {
+					return nil, friendlyError(err, server)
+				}
+				return v, nil
+			case "action":
+			default:
 				return nil, errors.New("action inconnue")
 			}
 			switch a := argString(args, 0); a {
@@ -434,7 +449,7 @@ func previewUI(view string) {
 			})
 	case "identify":
 		showWebWindow("CoopRatings : quel est ce jeu ?", "identify",
-			map[string]any{"name": "Hades II", "path": `C:\Users\moi\Desktop\Hades.II.v1.0-GOG\Hades2.exe`, "seconds": 2460}, 540, 640,
+			map[string]any{"name": "Hades II", "label": "Hades II", "path": `C:\Users\moi\Desktop\Hades.II.v1.0-GOG\Hades2.exe`, "seconds": 2460}, 540, 640,
 			func(method string, args []json.RawMessage) (any, error) {
 				slow()
 				return []apiSearchHit{
@@ -454,7 +469,7 @@ func previewUI(view string) {
 				slow()
 				return apiGame{ItemID: 1, Title: "Dice Hoarder", Grade: &grade, Status: &status}, nil
 			})
-	case "control", "activity":
+	case "control", "activity", "privacy":
 		now := time.Now()
 		ago := func(h float64) time.Time { return now.Add(-time.Duration(h * float64(time.Hour))) }
 		recent := []recentEntry{
@@ -469,6 +484,15 @@ func previewUI(view string) {
 			map[string]any{"version": version, "username": "Batap", "playing": []string{"Dice Hoarder"},
 				"queue": 1, "offline": false, "unknown": 1, "canUpdate": false,
 				"recent": recent, "minSession": minSessionSeconds}, 460, 600, true,
-			func(method string, args []json.RawMessage) (any, error) { return true, nil })
+			func(method string, args []json.RawMessage) (any, error) {
+				slow()
+				switch method {
+				case "getPlayTimes":
+					return playTimesPrivate, nil
+				case "setPlayTimes":
+					return argString(args, 0), nil
+				}
+				return true, nil
+			})
 	}
 }

@@ -165,10 +165,19 @@ type verdict struct {
 // "!" tray badge shows until it is identified manually.
 type unknownGame struct {
 	Key       string    `json:"key"`
-	Name      string    `json:"name"`
+	Name      string    `json:"name"` // a name that can be sent to the server, "" if none (see label)
 	Path      string    `json:"path"`
 	FirstSeen time.Time `json:"firstSeen"`
 	Seconds   int       `json:"seconds"` // pending playtime
+}
+
+// label is the game's name in the tray menu and windows (local display: the
+// exe name when no name can be sent).
+func (u unknownGame) label() string {
+	if u.Name != "" {
+		return u.Name
+	}
+	return filepath.Base(u.Path)
 }
 
 // activeSession is a game being played, saved on every tick to survive an
