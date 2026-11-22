@@ -100,43 +100,6 @@ func (a *apiClient) login(login, password string) (token, username string, err e
 	return out.Token, out.Username, err
 }
 
-// Play times setting of the account (who sees when you play):
-//
-//	off      the app sends only the duration of a session, added to the
-//	         game's hours: no date, no time
-//	private  times are sent, only you see them
-//	public   times are sent, everyone sees them ("when we play" stats)
-const (
-	playTimesOff     = "off"
-	playTimesPrivate = "private"
-	playTimesPublic  = "public"
-)
-
-type apiMe struct {
-	Username  string `json:"username"`
-	Tableur   string `json:"tableur"`
-	PlayTimes string `json:"playTimes"`
-}
-
-func (a *apiClient) me() (apiMe, error) {
-	var out apiMe
-	err := a.do("GET", "/api/agent/me", nil, &out)
-	if out.PlayTimes == "" { // server older than the setting: times were public
-		out.PlayTimes = playTimesPublic
-	}
-	return out, err
-}
-
-// setPlayTimes changes the account's play times setting and returns the
-// value saved by the server.
-func (a *apiClient) setPlayTimes(v string) (string, error) {
-	var out struct {
-		PlayTimes string `json:"playTimes"`
-	}
-	err := a.do("POST", "/api/agent/settings", map[string]string{"playTimes": v}, &out)
-	return out.PlayTimes, err
-}
-
 // apiCandidate is a program to identify. Locally, Key is the exe path; the
 // copy sent to the server has a plain number instead (agent.identify), so no
 // path ever leaves the PC.
@@ -191,28 +154,23 @@ func (a *apiClient) resolve(itemID, igdbID int, title string) (int, string, erro
 	return out.ItemID, out.Title, err
 }
 
-// apiSession is a finished session, with its start and end (RFC 3339, PC
-// local time) except with play times off: then only its duration, which the
-// site adds to the game's hours without keeping anything else.
+// apiSession is a finished session: a game, the day it started and its
+// duration. The time of day never leaves the PC.
 type apiSession struct {
 	ID       string `json:"id"` // random, so that a resend is not counted twice
 	ItemID   int    `json:"itemId,omitempty"`
 	IGDBID   int    `json:"igdbId,omitempty"`
 	Platform string `json:"platform,omitempty"`
 	Source   string `json:"source"`
-	Start    string `json:"start,omitempty"`
-	End      string `json:"end,omitempty"`
+	Day      string `json:"day"` // "2026-11-20", PC local date of the start
 	Seconds  int    `json:"seconds"`
 }
 
-// newAPISession converts a queued session; with play times off, no date nor
-// time is sent.
-func newAPISession(q queuedSession, playTimes string) apiSession {
-	s := apiSession{ID: q.ID, ItemID: q.ItemID, IGDBID: q.IGDBID, Platform: q.Platform, Source: q.Source, Seconds: q.Seconds}
-	if playTimes != playTimesOff {
-		s.Start, s.End = q.Start.Format(time.RFC3339), q.End.Format(time.RFC3339)
-	}
-	return s
+// newAPISession converts a queued session: of its start, only the date is
+// sent.
+func newAPISession(q queuedSession) apiSession {
+	return apiSession{ID: q.ID, ItemID: q.ItemID, IGDBID: q.IGDBID, Platform: q.Platform, Source: q.Source,
+		Day: q.Start.Format("2006-01-02"), Seconds: q.Seconds}
 }
 
 type apiSessionResult struct {

@@ -7,11 +7,7 @@ Appli Windows qui repère les jeux auxquels vous jouez et les ajoute toute seule
 
 ## Vie privée
 
-- **Envoyé au site** : le nom des jeux reconnus (ou de ce qui ressemble à un jeu, pour le vérifier) et la durée de vos parties.
-- **Jamais envoyé** : les chemins et dossiers de votre PC, son nom, votre nom d'utilisateur Windows, les autres programmes ouverts.
-- **Horaires de jeu**, réglables dans l'appli (*Vie privée*) ou sur le site (*Modifier le profil*) :
-  - *Désactivés* : seule la durée de chaque partie est envoyée et s'ajoute à vos heures, sans date ni heure (ces parties n'apparaissent pas dans les stats « Temps de jeu ») ;
-  - *Privés* : l'heure est envoyée, vous seul voyez quand vous jouez ;
-  - *Publics* : les membres voient à quels moments vous jouez.
+- **Envoyé au site** : le nom des jeux reconnus (ou de ce qui ressemble à un jeu, pour le vérifier), le jour et la durée de vos parties.
+- **Jamais envoyé** : l'heure à laquelle vous jouez, les chemins et dossiers de votre PC, son nom, votre nom d'utilisateur Windows, les autres programmes ouverts.
 
 Licence MIT.

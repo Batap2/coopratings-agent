@@ -387,16 +387,9 @@ func (a *agent) flush(now time.Time) {
 	if len(send) == 0 {
 		return
 	}
-	// Play times setting read just before sending (it can be changed on the
-	// site at any time): when off, start and end times stay on the PC.
-	me, err := a.api.me()
-	if err != nil {
-		a.netError(err)
-		return
-	}
 	sessions := make([]apiSession, len(send))
 	for i, q := range send {
-		sessions[i] = newAPISession(q, me.PlayTimes)
+		sessions[i] = newAPISession(q)
 	}
 	results, err := a.api.sendSessions(sessions)
 	if err != nil {

@@ -346,8 +346,7 @@ func orInt(v, def int) int {
 }
 
 // controlPanel shows the control window, opened on view "control" or
-// "activity" (recent sessions). Its "Vie privée" screen reads and changes the
-// account's play times setting.
+// "activity" (recent sessions).
 func controlPanel(cfg config, dev bool, view string) {
 	var st status
 	readJSON(appFile("status.json"), &st)
@@ -371,21 +370,7 @@ func controlPanel(cfg config, dev bool, view string) {
 	after.Store("")
 	shown := showWebWindowAt(appWindowTitle, view, data, 460, 600, true,
 		func(method string, args []json.RawMessage) (any, error) {
-			switch method {
-			case "getPlayTimes": // "Vie privée" screen
-				me, err := newAPI(cfg).me()
-				if err != nil {
-					return nil, friendlyError(err, server)
-				}
-				return me.PlayTimes, nil
-			case "setPlayTimes":
-				v, err := newAPI(cfg).setPlayTimes(argString(args, 0))
-				if err != nil {
-					return nil, friendlyError(err, server)
-				}
-				return v, nil
-			case "action":
-			default:
+			if method != "action" {
 				return nil, errors.New("action inconnue")
 			}
 			switch a := argString(args, 0); a {
@@ -469,7 +454,7 @@ func previewUI(view string) {
 				slow()
 				return apiGame{ItemID: 1, Title: "Dice Hoarder", Grade: &grade, Status: &status}, nil
 			})
-	case "control", "activity", "privacy":
+	case "control", "activity":
 		now := time.Now()
 		ago := func(h float64) time.Time { return now.Add(-time.Duration(h * float64(time.Hour))) }
 		recent := []recentEntry{
@@ -484,15 +469,6 @@ func previewUI(view string) {
 			map[string]any{"version": version, "username": "Batap", "playing": []string{"Dice Hoarder"},
 				"queue": 1, "offline": false, "unknown": 1, "canUpdate": false,
 				"recent": recent, "minSession": minSessionSeconds}, 460, 600, true,
-			func(method string, args []json.RawMessage) (any, error) {
-				slow()
-				switch method {
-				case "getPlayTimes":
-					return playTimesPrivate, nil
-				case "setPlayTimes":
-					return argString(args, 0), nil
-				}
-				return true, nil
-			})
+			func(method string, args []json.RawMessage) (any, error) { return true, nil })
 	}
 }

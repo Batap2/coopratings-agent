@@ -13,12 +13,11 @@ import (
 // fakeSite records the request bodies sent to each API route and answers
 // with canned JSON.
 type fakeSite struct {
-	bodies    map[string][]string
-	playTimes string
+	bodies map[string][]string
 }
 
 func newFakeSite(t *testing.T) (*fakeSite, *httptest.Server) {
-	f := &fakeSite{bodies: map[string][]string{}, playTimes: playTimesPublic}
+	f := &fakeSite{bodies: map[string][]string{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		f.bodies[r.URL.Path] = append(f.bodies[r.URL.Path], string(b))
@@ -26,8 +25,6 @@ func newFakeSite(t *testing.T) (*fakeSite, *httptest.Server) {
 		switch r.URL.Path {
 		case "/api/agent/login":
 			w.Write([]byte(`{"token":"t","username":"u"}`))
-		case "/api/agent/me":
-			json.NewEncoder(w).Encode(map[string]string{"username": "u", "playTimes": f.playTimes})
 		case "/api/agent/identify":
 			var in struct{ Candidates []apiCandidate }
 			json.Unmarshal(b, &in)
@@ -131,31 +128,27 @@ func TestIdentifySendsNoPath(t *testing.T) {
 	}
 }
 
-// Play times off: sessions go with their duration only, no date nor time.
-func TestPlayTimesOff(t *testing.T) {
-	for _, pt := range []string{playTimesOff, playTimesPublic} {
-		f, srv := newFakeSite(t)
-		f.playTimes = pt
-		a := testAgent(t)
-		a.api = &apiClient{server: srv.URL, token: "t", http: srv.Client()}
-		start := time.Date(2026, 11, 20, 23, 30, 0, 0, time.Local)
-		a.queue = []queuedSession{{ID: "s1", ItemID: 7, Source: "steam", Start: start, End: start.Add(time.Hour), Seconds: 3600}}
-		a.flush(time.Now())
+// A session goes with its day and its duration: the time of day stays on the
+// PC, and nothing else is asked from the site before sending.
+func TestSessionsSendNoTimeOfDay(t *testing.T) {
+	f, srv := newFakeSite(t)
+	a := testAgent(t)
+	a.api = &apiClient{server: srv.URL, token: "t", http: srv.Client()}
+	start := time.Date(2026, 11, 20, 23, 30, 0, 0, time.Local)
+	a.queue = []queuedSession{{ID: "s1", ItemID: 7, Source: "steam", Start: start, End: start.Add(time.Hour), Seconds: 3600}}
+	a.flush(time.Now())
 
-		sent := f.bodies["/api/agent/sessions"]
-		if len(sent) != 1 || len(a.queue) != 0 {
-			t.Fatalf("%s : %d envoi(s), file %d", pt, len(sent), len(a.queue))
-		}
-		var in struct{ Sessions []map[string]any }
-		json.Unmarshal([]byte(sent[0]), &in)
-		s := in.Sessions[0]
-		_, hasStart := s["start"]
-		_, hasEnd := s["end"]
-		if pt == playTimesOff && (hasStart || hasEnd || len(s) != 4 || s["id"] != "s1" || s["itemId"] != 7.0 || s["seconds"] != 3600.0) {
-			t.Fatalf("horaires désactivés : %v (attendu id, itemId, source, seconds seulement)", s)
-		}
-		if pt == playTimesPublic && (!hasStart || !hasEnd || s["day"] != nil) {
-			t.Fatalf("horaires publics : %v", s)
-		}
+	sent := f.bodies["/api/agent/sessions"]
+	if len(sent) != 1 || len(a.queue) != 0 || len(f.bodies) != 1 {
+		t.Fatalf("%d envoi(s), file %d, routes appelées %d", len(sent), len(a.queue), len(f.bodies))
+	}
+	var in struct{ Sessions []map[string]any }
+	json.Unmarshal([]byte(sent[0]), &in)
+	s := in.Sessions[0]
+	if len(s) != 5 || s["id"] != "s1" || s["itemId"] != 7.0 || s["source"] != "steam" || s["day"] != "2026-11-20" || s["seconds"] != 3600.0 {
+		t.Fatalf("session envoyée : %v (attendu id, itemId, source, day, seconds seulement)", s)
+	}
+	if strings.Contains(sent[0], "23:30") {
+		t.Fatalf("heure envoyée : %s", sent[0])
 	}
 }
