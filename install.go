@@ -108,6 +108,19 @@ func showAppWindow(dev bool, args ...string) {
 	}
 }
 
+// showAppWindowOn opens the app window on one game (see parseOpen) in a
+// second instance of the exe; an open window is replaced.
+func showAppWindowOn(dev bool, target string) {
+	args := []string{"--open", target}
+	if dev {
+		args = append(args, "--dev")
+	}
+	procAllowSetForeground.Call(uintptr(asfwAny))
+	if err := exec.Command(currentExe(), args...).Start(); err != nil {
+		log.Printf("fenêtre de l'appli : %v", err)
+	}
+}
+
 func setAutostart(on bool) error {
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, runKey, registry.SET_VALUE|registry.QUERY_VALUE)
 	if err != nil {
@@ -217,7 +230,7 @@ func uninstall() {
 // only one that modifies the state.
 
 type inboxMsg struct {
-	Type   string `json:"type"` // mute, resolve, notgame, reload, logout, revoke, showlogin, quit
+	Type   string `json:"type"` // mute, rated, resolve, notgame, reload, logout, revoke, showlogin, quit
 	ItemID int    `json:"itemId,omitempty"`
 	Key    string `json:"key,omitempty"`
 	Title  string `json:"title,omitempty"`

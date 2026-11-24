@@ -2,7 +2,7 @@ package main
 
 // Main loop: every minute (and 10 s after a game closes, see procwatch.go),
 // detect running games, have the server identify them, track play sessions,
-// upload finished ones and offer to rate the game.
+// upload finished ones and offer to rate the game (reminders.go).
 
 import (
 	"crypto/rand"
@@ -43,6 +43,9 @@ type agent struct {
 	authBad    bool // token rejected by the server: waiting for a new login
 	quit       bool
 	dev        bool
+
+	// Next check of the games to rate with the server (reminders.go)
+	nextRateCheck time.Time
 
 	// Auto-update (update.go)
 	nextUpdate time.Time
@@ -138,9 +141,10 @@ func (a *agent) tick() {
 	a.watchGames(cands)
 	a.flush(now)
 	a.flushMutes()
+	a.checkRatings(now)
 	a.flushRevokes(now)
 	a.refreshDetectable()
-	a.syncTrayIcon(len(a.st.Unknown) > 0 || !a.loggedIn()) // before save: st.TrayShown
+	a.syncTrayIcon(len(a.st.Unknown) > 0 || !a.loggedIn() || len(a.st.toRate()) > 0) // before save: st.TrayShown
 	a.st.save()
 	saveQueue(a.queue)
 	a.writeStatus()
@@ -401,7 +405,6 @@ func (a *agent) flush(now time.Time) {
 	for _, r := range results {
 		byID[r.ID] = r
 	}
-	notified := map[int]bool{}
 	keep = a.queue[:0]
 	for _, q := range a.queue {
 		r, ok := byID[q.ID]
@@ -445,25 +448,9 @@ func (a *agent) flush(now time.Time) {
 				a.st.Verdicts[q.Key] = v
 			}
 		}
-		if r.Notify && !a.st.Muted[r.ItemID] && !notified[r.ItemID] && now.Sub(q.End) < 3*time.Hour {
-			notified[r.ItemID] = true
-			a.notifyRate(r, q)
-		}
+		a.offerRating(r, q, now)
 	}
 	a.queue = keep
-}
-
-func (a *agent) notifyRate(r apiSessionResult, q queuedSession) {
-	// "Rate" opens the app's small rating window (grade + status) rather than
-	// the browser; that window can also open the spreadsheet for comments.
-	rate := fmt.Sprintf("%s:rate?item=%d&s=%d", protocolScheme, r.ItemID, q.Seconds)
-	mute := fmt.Sprintf("%s:mute?item=%d", protocolScheme, r.ItemID)
-	err := showToast(r.Title, formatDuration(q.Seconds)+" de jeu. Voulez-vous le noter ?", rate,
-		toastAction{Label: "Noter", URL: rate},
-		toastAction{Label: "Ne plus me rappeler pour ce jeu", URL: mute})
-	if err != nil {
-		log.Print(err)
-	}
 }
 
 func formatDuration(secs int) string {
@@ -516,8 +503,12 @@ func (a *agent) handleInbox(now time.Time) {
 			}
 		case "mute":
 			a.st.Muted[m.ItemID] = true
+			delete(a.st.Rate, m.ItemID)
 			a.st.PendingMutes = append(a.st.PendingMutes, m.ItemID)
 			log.Printf("rappels coupés pour le jeu %d", m.ItemID)
+		case "rated":
+			// Saved from the rating window: no longer to rate.
+			delete(a.st.Rate, m.ItemID)
 		case "resolve":
 			a.st.Verdicts[m.Key] = verdict{Verdict: "game", ItemID: m.ItemID, Title: m.Title, At: now}
 			delete(a.st.Unknown, m.Key)

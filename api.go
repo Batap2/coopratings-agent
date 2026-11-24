@@ -17,6 +17,15 @@ import (
 
 var errUnauthorized = errors.New("session expirée")
 
+// httpError is an error answered by the server (status >= 300), as opposed
+// to a network error.
+type httpError struct {
+	status int
+	msg    string
+}
+
+func (e *httpError) Error() string { return e.msg }
+
 type apiClient struct {
 	server string
 	token  string
@@ -62,10 +71,10 @@ func (a *apiClient) do(method, path string, in, out any) error {
 			Error string `json:"error"`
 		}
 		json.NewDecoder(resp.Body).Decode(&e)
-		if e.Error != "" {
-			return errors.New(e.Error)
+		if e.Error == "" {
+			e.Error = resp.Status
 		}
-		return errors.New(resp.Status)
+		return &httpError{status: resp.StatusCode, msg: e.Error}
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)

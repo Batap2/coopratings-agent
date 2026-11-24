@@ -8,6 +8,9 @@
 //	                           Already running: open the control window.
 //	--autostart                launched at Windows startup (silent)
 //	--activity                 already running: open the recent activity
+//	--open identify:<key>|rate:<id>
+//	                           already running: open the app window on one game
+//	                           to identify or to rate (tray menu)
 //	coopratings-agent:…        notification click/buttons (rate, mute, login)
 //	--diagnostic               detection report in a text file
 //	--test-notification        show a test notification
@@ -50,7 +53,7 @@ func main() {
 		diag, dev, once, autostart, testNotif bool
 		afterUpdate, activity                 bool
 		uninstallReq, quiet                   bool
-		server, devLogin, protoArg            string
+		server, devLogin, protoArg, openArg   string
 		interval                              = time.Minute
 	)
 	args := os.Args[1:]
@@ -79,6 +82,9 @@ func main() {
 			afterUpdate, autostart = true, true
 		case a == "--server" && i+1 < len(args):
 			server = args[i+1]
+			i++
+		case a == "--open" && i+1 < len(args):
+			openArg = args[i+1]
 			i++
 		case a == "--login" && i+1 < len(args):
 			devLogin = args[i+1]
@@ -143,15 +149,10 @@ func main() {
 				if askLogin(&cfg) == nil {
 					postInbox(inboxMsg{Type: "reload"})
 				}
-			} else if m, ok := acquireMutex(mutexName + "-window"); !ok {
-				focusWindow(appWindowTitle) // already open (double click on the icon…)
+			} else if activity {
+				openAppWindow(cfg, dev, "activity", "")
 			} else {
-				defer windows.CloseHandle(m)
-				if activity {
-					controlPanel(cfg, dev, "activity")
-				} else {
-					controlPanel(cfg, dev, "control")
-				}
+				openAppWindow(cfg, dev, "control", openArg)
 			}
 		}
 		return
@@ -271,30 +272,20 @@ func handleProtocol(raw string) {
 			postInbox(inboxMsg{Type: "showlogin"})
 		}
 	case "rate":
-		// "Rate" button (or click on the notification): small grade + status
-		// window, one at a time.
+		// "Rate" button (or click on the notification): the app window, in
+		// the corner, on the game's rating page.
 		id, err := strconv.Atoi(u.Query().Get("item"))
 		if err != nil || id <= 0 {
 			return
 		}
-		m, ok := acquireMutex(mutexName + "-rate")
-		if !ok {
-			return
-		}
-		defer windows.CloseHandle(m)
 		secs, _ := strconv.Atoi(u.Query().Get("s"))
-		rateWindow(loadConfig(), id, secs)
+		openAppWindow(loadConfig(), false, "control", fmt.Sprintf("session:%d:%d", id, secs))
 	case "mute":
 		id, err := strconv.Atoi(u.Query().Get("item"))
 		if err != nil || id <= 0 {
 			return
 		}
-		// The main process mutes the reminder and tells the server, retrying
-		// later if it is unreachable.
-		postInbox(inboxMsg{Type: "mute", ItemID: id})
-		if !mutexExists(mutexName) {
-			newAPI(loadConfig()).mute(id)
-		}
+		muteGame(id)
 		log.Printf("rappels coupés pour le jeu %d (depuis une notification)", id)
 	}
 }

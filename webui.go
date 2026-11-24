@@ -263,75 +263,75 @@ func askLogin(cfg *config) error {
 // --- Unrecognized game -------------------------------------------------------
 
 func identifyDialog(api *apiClient, u unknownGame) {
-	shown := showWebWindow("CoopRatings : quel est ce jeu ?", "identify",
-		map[string]any{"name": u.Name, "label": u.label(), "path": u.Path, "seconds": u.Seconds}, 540, 640,
+	shown := showWebWindow("CoopRatings : quel est ce jeu ?", "identify", unknownData(u), 540, 640,
 		func(method string, args []json.RawMessage) (any, error) {
-			switch method {
-			case "search":
-				hits, err := api.search(argString(args, 0))
-				if err != nil {
-					return nil, friendlyError(err, api.server)
-				}
-				if hits == nil {
-					hits = []apiSearchHit{}
-				}
-				return hits, nil
-			case "resolve":
-				itemID, title, err := api.resolve(argInt(args, 0), argInt(args, 1), argString(args, 2))
-				if err != nil {
-					return nil, friendlyError(err, api.server)
-				}
-				if itemID > 0 {
-					postInbox(inboxMsg{Type: "resolve", Key: u.Key, ItemID: itemID, Title: title})
-				}
-				return true, nil
-			case "notGame":
-				postInbox(inboxMsg{Type: "notgame", Key: u.Key})
-				return true, nil
-			}
-			return nil, errors.New("action inconnue")
+			return identifyCall(api, u.Key, method, args)
 		})
 	if !shown {
 		identifyDialogClassic(api, u)
 	}
 }
 
-// --- Rate a game (button of the end-of-session notification) -----------------
+// unknownData is a game to identify as the identify view reads it.
+func unknownData(u unknownGame) map[string]any {
+	return map[string]any{"key": u.Key, "name": u.Name, "label": u.label(), "path": u.Path, "seconds": u.Seconds}
+}
 
-// rateWindow sets a grade (out of 20) and status without going through the
-// browser. If the server does not respond, it opens the game's row in the
-// spreadsheet instead.
-func rateWindow(cfg config, itemID, seconds int) {
-	api := newAPI(cfg)
-	fallback := fmt.Sprintf("%s/tableur?jeu=%d", api.server, itemID)
-	g, err := api.game(itemID)
-	if err != nil {
-		log.Printf("noter le jeu %d : %v", itemID, err)
-		openURL(fallback)
-		return
+// identifyCall handles a call of the identify view for the game key (in its
+// own window or in the app window).
+func identifyCall(api *apiClient, key, method string, args []json.RawMessage) (any, error) {
+	switch method {
+	case "search":
+		hits, err := api.search(argString(args, 0))
+		if err != nil {
+			return nil, friendlyError(err, api.server)
+		}
+		if hits == nil {
+			hits = []apiSearchHit{}
+		}
+		return hits, nil
+	case "resolve":
+		itemID, title, err := api.resolve(argInt(args, 0), argInt(args, 1), argString(args, 2))
+		if err != nil {
+			return nil, friendlyError(err, api.server)
+		}
+		if itemID > 0 {
+			postInbox(inboxMsg{Type: "resolve", Key: key, ItemID: itemID, Title: title})
+		}
+		return true, nil
+	case "notGame":
+		postInbox(inboxMsg{Type: "notgame", Key: key})
+		return true, nil
 	}
-	if g.URL != "" {
-		fallback = g.URL
+	return nil, errors.New("action inconnue")
+}
+
+// --- Rate a game (end-of-session notification, games to rate) ----------------
+// The rate view is shown in the app window (see openAppWindow).
+
+// rateCall handles a call of the rate view for the game itemID.
+func rateCall(api *apiClient, itemID int, method string, args []json.RawMessage) (any, error) {
+	switch method {
+	case "mute":
+		muteGame(itemID)
+		log.Printf("rappels coupés pour le jeu %d (depuis la fenêtre de note)", itemID)
+		return true, nil
+	case "rate":
+		if len(args) < 2 {
+			break
+		}
+		var grade, status *int
+		json.Unmarshal(args[0], &grade)
+		json.Unmarshal(args[1], &status)
+		saved, err := api.rate(itemID, grade, status)
+		if err != nil {
+			return nil, friendlyError(err, api.server)
+		}
+		log.Printf("noté depuis la fenêtre de note : %s", saved.Title)
+		postInbox(inboxMsg{Type: "rated", ItemID: itemID})
+		return saved, nil
 	}
-	shown := showWebWindow("CoopRatings : noter "+g.Title, "rate",
-		map[string]any{"game": g, "seconds": seconds}, 460, 520,
-		func(method string, args []json.RawMessage) (any, error) {
-			if method != "rate" || len(args) < 2 {
-				return nil, errors.New("action inconnue")
-			}
-			var grade, status *int
-			json.Unmarshal(args[0], &grade)
-			json.Unmarshal(args[1], &status)
-			saved, err := api.rate(itemID, grade, status)
-			if err != nil {
-				return nil, friendlyError(err, api.server)
-			}
-			log.Printf("noté depuis la notification : %s", saved.Title)
-			return saved, nil
-		})
-	if !shown {
-		openURL(fallback)
-	}
+	return nil, errors.New("action inconnue")
 }
 
 // --- Control window (shown when the app is launched while running) -----------
@@ -345,9 +345,50 @@ func orInt(v, def int) int {
 	return v
 }
 
+// openAppWindow shows the app window in this process, in the bottom-right
+// corner. One at a time: an open one is brought to the front, or, to show a
+// given game (target, see parseOpen), closed and replaced.
+func openAppWindow(cfg config, dev bool, view, target string) {
+	m, ok := acquireMutex(mutexName + "-window")
+	if !ok && target != "" && closeWindow(appWindowTitle) {
+		for deadline := time.Now().Add(3 * time.Second); !ok && time.Now().Before(deadline); {
+			time.Sleep(100 * time.Millisecond)
+			m, ok = acquireMutex(mutexName + "-window")
+		}
+	}
+	if !ok {
+		focusWindow(appWindowTitle) // already open (double click on the icon…)
+		return
+	}
+	defer windows.CloseHandle(m)
+	controlPanel(cfg, dev, view, target)
+}
+
+// parseOpen reads the game the app window opens on: "identify:<key>" and
+// "rate:<item id>" (tray menu), or "session:<item id>:<seconds>" (button of
+// the end-of-session notification). nil: the home view.
+func parseOpen(target string) map[string]any {
+	kind, rest, _ := strings.Cut(target, ":")
+	switch kind {
+	case "identify":
+		if rest != "" {
+			return map[string]any{"kind": kind, "key": rest}
+		}
+	case "rate", "session":
+		ids, secs, _ := strings.Cut(rest, ":")
+		id, err := strconv.Atoi(ids)
+		if err != nil || id <= 0 {
+			return nil
+		}
+		s, _ := strconv.Atoi(secs)
+		return map[string]any{"kind": kind, "itemId": id, "seconds": s}
+	}
+	return nil
+}
+
 // controlPanel shows the control window, opened on view "control" or
-// "activity" (recent sessions).
-func controlPanel(cfg config, dev bool, view string) {
+// "activity" (recent sessions), or on one game (target, see parseOpen).
+func controlPanel(cfg config, dev bool, view, target string) {
 	var st status
 	readJSON(appFile("status.json"), &st)
 	playing := st.Playing
@@ -358,19 +399,51 @@ func controlPanel(cfg config, dev bool, view string) {
 	if recent == nil {
 		recent = []recentEntry{}
 	}
+	// Games to identify or to rate: listed and handled in this window.
+	unknown := []map[string]any{}
+	for _, u := range loadUnknown() {
+		unknown = append(unknown, unknownData(u))
+	}
+	toRate := loadState().toRate()
+	if toRate == nil {
+		toRate = []rateEntry{}
+	}
 	data := map[string]any{
 		"version": version, "username": orDefault(cfg.Username, "?"), "playing": playing,
-		"queue": st.Queue, "offline": st.Offline, "unknown": st.Unknown,
+		"queue": st.Queue, "offline": st.Offline, "unknownList": unknown, "toRateList": toRate,
 		"recent": recent, "minSession": orInt(st.MinSession, minSessionSeconds),
 		// Downloaded exe newer than the running version: offer to install it.
 		"canUpdate": !dev && !isInstalledCopy() && isNewer(version, st.Version),
 	}
+	open := parseOpen(target)
+	if open != nil {
+		data["open"] = open
+	}
 	server := strings.TrimRight(cfg.Server, "/")
+	api := newAPI(cfg)
 	var after atomic.Value // action to run once the window is closed
 	after.Store("")
 	shown := showWebWindowAt(appWindowTitle, view, data, 460, 600, true,
 		func(method string, args []json.RawMessage) (any, error) {
-			if method != "action" {
+			switch method {
+			case "identifyCall": // key, method, its arguments
+				if len(args) < 2 {
+					return nil, errors.New("action inconnue")
+				}
+				return identifyCall(api, argString(args, 0), argString(args, 1), args[2:])
+			case "rateCall": // item id, method, its arguments
+				if len(args) < 2 {
+					return nil, errors.New("action inconnue")
+				}
+				return rateCall(api, argInt(args, 0), argString(args, 1), args[2:])
+			case "game":
+				g, err := api.game(argInt(args, 0))
+				if err != nil {
+					return nil, friendlyError(err, api.server)
+				}
+				return g, nil
+			case "action":
+			default:
 				return nil, errors.New("action inconnue")
 			}
 			switch a := argString(args, 0); a {
@@ -384,7 +457,7 @@ func controlPanel(cfg config, dev bool, view string) {
 				postInbox(inboxMsg{Type: "logout"})
 			case "quit":
 				postInbox(inboxMsg{Type: "quit"})
-			case "identify", "update", "uninstall":
+			case "update", "uninstall":
 				after.Store(a)
 			default:
 				if id, err := strconv.Atoi(strings.TrimPrefix(a, "game:")); strings.HasPrefix(a, "game:") && err == nil && id > 0 {
@@ -394,15 +467,15 @@ func controlPanel(cfg config, dev bool, view string) {
 			return true, nil
 		})
 	if !shown {
+		// No WebView2: a game to rate opens in the browser.
+		if id, _ := open["itemId"].(int); id > 0 {
+			openURL(fmt.Sprintf("%s/tableur?jeu=%d", server, id))
+			return
+		}
 		controlPanelClassic(cfg, dev)
 		return
 	}
 	switch after.Load().(string) {
-	case "identify":
-		api := newAPI(cfg)
-		for _, u := range loadUnknown() {
-			identifyDialog(api, u)
-		}
 	case "update":
 		postInbox(inboxMsg{Type: "quit"})
 		if waitMainExit(10*time.Second) && installSelf() == nil && relaunch(nil) == nil {
@@ -421,6 +494,14 @@ func controlPanel(cfg config, dev bool, view string) {
 // previewUI opens a window with sample data (--preview-ui).
 func previewUI(view string) {
 	slow := func() { time.Sleep(500 * time.Millisecond) }
+	hits := []apiSearchHit{
+		{ItemID: 825, Title: "Hades II", Year: 2025, Detail: "sur CoopRatings", Type: "Jeu principal",
+			Platforms: []string{"Mac", "Switch", "Switch 2", "PC", "PS5", "Series X|S"}},
+		{ItemID: 659, Title: "Hades", Year: 2020, Detail: "sur CoopRatings", Type: "Jeu principal",
+			Platforms: []string{"Mac", "Switch", "PC", "PS4", "PS5", "XONE", "Series X|S", "iOS"}},
+		{IGDBID: 2, Title: "Hades II: Soundtrack Pack", Year: 2025, Detail: "IGDB", Type: "DLC", Platforms: []string{"PC"}},
+	}
+	grade, status := 14, 0
 	switch view {
 	case "login", "welcome":
 		showWebWindow("CoopRatings : connexion", view,
@@ -437,19 +518,17 @@ func previewUI(view string) {
 			map[string]any{"name": "Hades II", "label": "Hades II", "path": `C:\Users\moi\Desktop\Hades.II.v1.0-GOG\Hades2.exe`, "seconds": 2460}, 540, 640,
 			func(method string, args []json.RawMessage) (any, error) {
 				slow()
-				return []apiSearchHit{
-					{ItemID: 825, Title: "Hades II", Year: 2025, Detail: "sur CoopRatings", Type: "Jeu principal",
-						Platforms: []string{"Mac", "Switch", "Switch 2", "PC", "PS5", "Series X|S"}},
-					{ItemID: 659, Title: "Hades", Year: 2020, Detail: "sur CoopRatings", Type: "Jeu principal",
-						Platforms: []string{"Mac", "Switch", "PC", "PS4", "PS5", "XONE", "Series X|S", "iOS"}},
-					{IGDBID: 2, Title: "Hades II: Soundtrack Pack", Year: 2025, Detail: "IGDB", Type: "DLC", Platforms: []string{"PC"}},
-				}, nil
+				return hits, nil
 			})
-	case "rate":
-		grade, status := 14, 0
+	case "rate", "rate-late": // rate-late: opened from the games to rate
+		late := view == "rate-late"
+		seconds := 14520
+		if late {
+			seconds = 0
+		}
 		showWebWindow("CoopRatings : noter Dice Hoarder", "rate",
 			map[string]any{"game": apiGame{ItemID: 1, Title: "Dice Hoarder", Year: 2025, Status: &status,
-				URL: "https://coopratings.duckdns.org/tableur?jeu=1"}, "seconds": 14520}, 460, 520,
+				URL: "https://coopratings.duckdns.org/tableur?jeu=1"}, "seconds": seconds, "late": late}, 460, 520,
 			func(method string, args []json.RawMessage) (any, error) {
 				slow()
 				return apiGame{ItemID: 1, Title: "Dice Hoarder", Grade: &grade, Status: &status}, nil
@@ -465,10 +544,26 @@ func previewUI(view string) {
 			{Title: "Wallpaper Engine", End: ago(27), Seconds: 3600, State: "notgame"},
 			{Title: "Duskers", ItemID: 4, End: ago(75), Seconds: 1500, State: "removed"},
 		}
+		unknown := []map[string]any{unknownData(unknownGame{Key: "hades2", Name: "Hades II",
+			Path: `C:\Users\moi\Desktop\Hades.II.v1.0-GOG\Hades2.exe`, Seconds: 2460})}
+		toRate := []rateEntry{{ItemID: 1, Title: "Dice Hoarder"}, {ItemID: 2, Title: "Balatro"}}
 		showWebWindowAt(appWindowTitle, view,
 			map[string]any{"version": version, "username": "Batap", "playing": []string{"Dice Hoarder"},
-				"queue": 1, "offline": false, "unknown": 1, "canUpdate": false,
+				"queue": 1, "offline": false, "unknownList": unknown, "toRateList": toRate, "canUpdate": false,
 				"recent": recent, "minSession": minSessionSeconds}, 460, 600, true,
-			func(method string, args []json.RawMessage) (any, error) { return true, nil })
+			func(method string, args []json.RawMessage) (any, error) {
+				switch {
+				case method == "game":
+					id := argInt(args, 0)
+					return apiGame{ItemID: id, Title: toRate[id-1].Title, Year: 2025, Status: &status}, nil
+				case method == "identifyCall" && argString(args, 1) == "search":
+					slow()
+					return hits, nil
+				case method == "rateCall" && argString(args, 1) == "rate":
+					slow()
+					return apiGame{ItemID: argInt(args, 0), Grade: &grade, Status: &status}, nil
+				}
+				return true, nil
+			})
 	}
 }

@@ -5,9 +5,10 @@ package main
 // to keep it visible.
 //
 // Left click opens the app window (the login window when logged out); right
-// click opens the menu: status, games to identify, recent activity,
-// spreadsheet, start with Windows, diagnostic, logout, quit. A "!" badge is
-// added when a game was not recognized by the server.
+// click opens the menu: status, games to identify, games to rate, recent
+// activity, spreadsheet, start with Windows, diagnostic, logout, quit. A "!"
+// badge is added when a game was not recognized by the server, or is to rate
+// (reminders.go).
 //
 // Actions that change the state go through inbox\ (like other processes):
 // only the agent loop touches the state.
@@ -22,7 +23,10 @@ import (
 	"github.com/ncruces/zenity"
 )
 
-const traySlots = 8
+const (
+	traySlots = 8 // games to identify
+	rateSlots = 5 // games to rate
+)
 
 type trayUI struct {
 	mu       sync.Mutex
@@ -33,11 +37,13 @@ type trayUI struct {
 	playing  *systray.MenuItem
 	header   *systray.MenuItem
 	slots    [traySlots]*systray.MenuItem
+	rateHead *systray.MenuItem
+	rateRows [rateSlots]*systray.MenuItem
+	toRate   []rateEntry
 	auto     *systray.MenuItem
 	unknown  []unknownGame
 	loggedIn bool
 	badge    bool
-	dialogOn bool
 	loginOn  bool
 }
 
@@ -86,6 +92,20 @@ func newTrayUI(cfg config, dev bool) *trayUI {
 		go func(i int) {
 			for range s.ClickedCh {
 				go t.identify(i)
+			}
+		}(i)
+	}
+
+	t.rateHead = systray.AddMenuItem("Jeux à noter :", "Pas joué depuis une semaine, et toujours sans note")
+	t.rateHead.Disable()
+	t.rateHead.Hide()
+	for i := range t.rateRows {
+		s := systray.AddMenuItem("", "Noter ce jeu")
+		s.Hide()
+		t.rateRows[i] = s
+		go func(i int) {
+			for range s.ClickedCh {
+				t.rate(i)
 			}
 		}(i)
 	}
@@ -150,10 +170,11 @@ func (t *trayUI) update(st *state, username string, loggedIn, offline bool) {
 		unknown = append(unknown, u)
 	}
 	sort.Slice(unknown, func(i, j int) bool { return unknown[i].FirstSeen.Before(unknown[j].FirstSeen) })
+	toRate := st.toRate()
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.unknown, t.loggedIn = unknown, loggedIn
+	t.unknown, t.toRate, t.loggedIn = unknown, toRate, loggedIn
 
 	if loggedIn {
 		t.account.SetTitle("CoopRatings · " + username)
@@ -180,6 +201,9 @@ func (t *trayUI) update(st *state, username string, loggedIn, offline bool) {
 	if len(unknown) > 0 {
 		tip += fmt.Sprintf(" · %d jeu(x) à identifier", len(unknown))
 	}
+	if len(toRate) > 0 {
+		tip += fmt.Sprintf(" · %d jeu(x) à noter", len(toRate))
+	}
 	systray.SetTooltip(tip)
 
 	if len(unknown) > 0 {
@@ -199,7 +223,20 @@ func (t *trayUI) update(st *state, username string, loggedIn, offline bool) {
 			s.Hide()
 		}
 	}
-	if badge := len(unknown) > 0 || !loggedIn; badge != t.badge {
+	if len(toRate) > 0 {
+		t.rateHead.Show()
+	} else {
+		t.rateHead.Hide()
+	}
+	for i, s := range t.rateRows {
+		if i < len(toRate) {
+			s.SetTitle("★ " + toRate[i].Title)
+			s.Show()
+		} else {
+			s.Hide()
+		}
+	}
+	if badge := len(unknown) > 0 || len(toRate) > 0 || !loggedIn; badge != t.badge {
 		t.badge = badge
 		if badge {
 			systray.SetIcon(trayIconBadge)
@@ -209,20 +246,28 @@ func (t *trayUI) update(st *state, username string, loggedIn, offline bool) {
 	}
 }
 
-// identify opens the "which game is this?" window (one at a time).
+// identify opens the app window on the "which game is this?" page.
 func (t *trayUI) identify(i int) {
 	t.mu.Lock()
-	if t.dialogOn || i >= len(t.unknown) {
+	if i >= len(t.unknown) {
 		t.mu.Unlock()
 		return
 	}
-	t.dialogOn = true
-	u := t.unknown[i]
+	key := t.unknown[i].Key
 	t.mu.Unlock()
-	identifyDialog(newAPI(loadConfig()), u)
+	showAppWindowOn(t.dev, "identify:"+key)
+}
+
+// rate opens the app window on the rating page of a game to rate.
+func (t *trayUI) rate(i int) {
 	t.mu.Lock()
-	t.dialogOn = false
+	if i >= len(t.toRate) {
+		t.mu.Unlock()
+		return
+	}
+	id := t.toRate[i].ItemID
 	t.mu.Unlock()
+	showAppWindowOn(t.dev, fmt.Sprintf("rate:%d", id))
 }
 
 func (t *trayUI) logout() {

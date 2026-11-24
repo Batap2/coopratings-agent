@@ -26,6 +26,7 @@ var (
 	procGetWindowLongPtrW    = user32.NewProc("GetWindowLongPtrW")
 	procAllowSetForeground   = user32.NewProc("AllowSetForegroundWindow")
 	procFindWindowW          = user32.NewProc("FindWindowW")
+	procPostMessageW         = user32.NewProc("PostMessageW")
 	procShowWindow           = user32.NewProc("ShowWindow")
 	procIsIconic             = user32.NewProc("IsIconic")
 	procGetCursorPos         = user32.NewProc("GetCursorPos")
@@ -201,6 +202,18 @@ func focusWindow(title string) bool {
 		procShowWindow.Call(h, 9) // SW_RESTORE
 	}
 	procSetForegroundWindow.Call(h)
+	return true
+}
+
+// closeWindow asks the top-level window with this exact title to close
+// (WM_CLOSE); false if there is none.
+func closeWindow(title string) bool {
+	p, _ := windows.UTF16PtrFromString(title)
+	h, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(p)))
+	if h == 0 {
+		return false
+	}
+	procPostMessageW.Call(h, 0x0010, 0, 0) // WM_CLOSE
 	return true
 }
 

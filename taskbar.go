@@ -1,8 +1,8 @@
 package main
 
 // Shows the notification-area icon directly in the taskbar while something
-// needs the user (a game to identify, a login), and puts it back in the
-// overflow (^) afterwards.
+// needs the user (a game to identify or to rate, a login), and puts it back
+// in the overflow (^) afterwards.
 //
 // Windows 11 stores, for each notification-area icon, whether it is shown in
 // the taskbar: HKCU\Control Panel\NotifyIconSettings\<id>\IsPromoted, the

@@ -217,6 +217,7 @@ type state struct {
 	LastEnd      map[string]time.Time      `json:"lastEnd"`             // end of the last session per game (prevents double counting)
 	TrayShown    bool                      `json:"trayShown,omitempty"` // icon put in the taskbar by the app (taskbar.go)
 	History      []historyEntry            `json:"history,omitempty"`   // finished sessions, oldest first (history.go)
+	Rate         map[int]*rateReminder     `json:"rate,omitempty"`      // unrated games played lately, by item id (reminders.go)
 }
 
 func loadState() *state {
@@ -239,6 +240,9 @@ func loadState() *state {
 	}
 	if s.LastEnd == nil {
 		s.LastEnd = map[string]time.Time{}
+	}
+	if s.Rate == nil {
+		s.Rate = map[int]*rateReminder{}
 	}
 	for k, t := range s.LastEnd {
 		if time.Since(t) > 48*time.Hour {
